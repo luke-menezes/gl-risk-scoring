@@ -129,4 +129,49 @@ def test_fixtures_load_and_scoring_beats_baselines():
     k = scoring.priority_list_size(len(ledger))
     table = evaluate.compare_rankings(scored, ledger, amt, k)
     precision = table[f"Precision@{k}"]
-    assert precision["Risk score"] > precision["Number of flags"] > precision["Amount only"]
+    assert precision["Risk score"] > precision["Number of tests hit"] > precision["Amount only"]
+    assert precision["Ceiling (flagged lines)"] >= precision["Risk score"]
+    # The in-memory IDEA side matches the committed exports
+    assert pipeline.idea_side_flags(ledger, amt) == idea
+
+
+def test_score_breakdown_adds_up():
+    ledger = synthetic.make_ledger(5_000, seed=2)
+    amt = synthetic.amount_columns(ledger)
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt))
+    scored = scoring.score_flags(flagged, amt, top_n=50)
+    for breakdown, base in zip(scored["Score Breakdown"], scored["Base Score"]):
+        terms = breakdown.split(", × amount ")[0].split(" + ")
+        parts = [float(t.rsplit(" ", 1)[1]) for t in terms]      # "Seldom Account Entries 6.8" -> 6.8
+        assert sum(parts) == pytest.approx(base, abs=0.05 * len(parts))   # each term rounded to 1 dp
+    assert (scored["Score"] - (scored["Base Score"] * scored["Amount Multiplier"])).abs().max() < 0.01
+    assert scored["Score Breakdown"].iloc[0].count("date") <= 1   # date tests appear once at most
+
+
+def test_ablation_switches():
+    df = small()
+    flagged = flags.consolidate(df, {"Suspicious Keyword": {"2", "6"}, "Saturday": {"2"}, "Sunday": {"3"}})
+    flat = scoring.score_flags(flagged, ["Amount"], top_n=None, amount_multiplier=False)
+    assert (flat["Amount Multiplier"] == 1.0).all()
+    no_rarity = scoring.score_flags(flagged, ["Amount"], top_n=None, use_rarity=False).attrs["weights"]
+    assert no_rarity == {"Suspicious Keyword": 2.5, "Saturday": 0.5, "Sunday": 0.5}
+    uncollapsed = scoring.score_flags(flagged, ["Amount"], top_n=None, collapse_dates=False)
+    assert uncollapsed.attrs["date_tests"] == []
+
+
+def test_benchmark_run_once_is_consistent():
+    results = evaluate.run_once(2_000, 0.005, seed=0, ks=[10])
+    assert set(results["k"]) == {10, scoring.priority_list_size(2_000 + 5)}
+    assert results["precision"].between(0, 1).all() and results["recall"].between(0, 1).all()
+    at = results.set_index(["k", "ranking"])["recall"]
+    assert all(at[(k, "Ceiling (flagged lines)")] >= at[(k, "Risk score")] for k in results["k"].unique())
+    summary = evaluate.summarise(results)
+    assert {"precision mean", "recall std", "seeds"} <= set(summary.columns)
+
+
+def test_isolation_forest_ranks_every_line():
+    pytest.importorskip("sklearn")
+    from glrisk.ml_baseline import isolation_forest_ranking
+    ledger = synthetic.make_ledger(1_000, seed=0)
+    ranked = isolation_forest_ranking(ledger, synthetic.amount_columns(ledger))
+    assert sorted(ranked) == sorted(ledger["Sr No"])
