@@ -84,7 +84,7 @@ def run_once(n_rows: int, anomaly_rate: float, seed: int, ks: Iterable[int] | No
 
     The IDEA-side tests are computed in memory (``pipeline.idea_side_flags``). Returns a long
     table: ``n_rows``, ``anomaly_rate``, ``seed``, ``ranking``, ``k``, ``default_k``, ``precision``,
-    ``recall``.
+    ``recall`` and ``share_of_ceiling`` (precision ÷ the best possible precision at that k).
     """
     ledger = synthetic.make_ledger(n_rows, seed=seed, anomaly_rate=anomaly_rate)
     amt = synthetic.amount_columns(ledger)
@@ -101,17 +101,20 @@ def run_once(n_rows: int, anomaly_rate: float, seed: int, ks: Iterable[int] | No
 
     rows = []
     for k in ks:
+        best = ceilings(scored, truth, k)
         for name, ids in ranked.items():
-            rows.append((name, k, *precision_recall_at_k(ids, truth, k)))
-        rows.append(("Ceiling (flagged lines)", k, *ceilings(scored, truth, k)))
-    out = pd.DataFrame(rows, columns=["ranking", "k", "precision", "recall"])
+            precision, recall = precision_recall_at_k(ids, truth, k)
+            rows.append((name, k, precision, recall, precision / best[0] if best[0] else 0.0))
+        rows.append(("Ceiling (flagged lines)", k, *best, 1.0))
+    out = pd.DataFrame(rows, columns=["ranking", "k", "precision", "recall", "share_of_ceiling"])
     return out.assign(n_rows=n_rows, anomaly_rate=anomaly_rate, seed=seed, default_k=default_k)
 
 
 def summarise(results: pd.DataFrame, default_k_only: bool = True) -> pd.DataFrame:
-    """Mean and standard deviation of precision and recall per ranking (over seeds)."""
+    """Mean and standard deviation of precision, recall and share of ceiling per ranking (over seeds)."""
     data = results[results["k"] == results["default_k"]] if default_k_only else results
     keys = ["n_rows", "anomaly_rate", "ranking"] + ([] if default_k_only else ["k"])
-    table = data.groupby(keys, sort=False)[["precision", "recall"]].agg(["mean", "std"]).round(3)
+    metrics = [m for m in ("precision", "recall", "share_of_ceiling") if m in data.columns]
+    table = data.groupby(keys, sort=False)[metrics].agg(["mean", "std"]).round(3)
     table.columns = [f"{m} {s}" for m, s in table.columns]
     return table.assign(seeds=data.groupby(keys, sort=False)["seed"].nunique()).reset_index()

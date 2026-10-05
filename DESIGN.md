@@ -49,7 +49,10 @@ refuses IDs it can't find in the ledger, because a silent mismatch would drop fl
 
 ## Evaluation
 
-The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads.
+The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads. Most
+carry one to four red flags. A tenth are "silent": an unusually large amount on a common account,
+on an ordinary working day, with nothing for any test to find. They keep the recall ceiling below
+1, as it would be on real ledgers, and give the Isolation Forest something the rules can't see.
 `evaluate.run_once` generates a ledger, runs every test (the IDEA side in memory), scores it, and
 measures precision and recall at k for:
 
@@ -60,12 +63,16 @@ measures precision and recall at k for:
 - the ceiling.
 
 `scripts/run_benchmark.py` repeats this over 30 seeds and sweeps the ledger size and anomaly rate.
+The size sweep keeps about 1.2 anomalies per list place at every size, as in the 20,000-line
+ledger. With a fixed rate instead, a large ledger has far more anomalies than list places and
+every ranking looks perfect; a small one has too few to fill the list.
 
 - **Several seeds**, because one ledger can be lucky. The standard deviation shows how far results
   move between ledgers.
 - **The ceiling**, because recall and precision only mean something next to the best achievable:
   no ranking of flagged lines can find an anomaly that trips no test, and a list of k lines can't
-  hold more anomalies than exist.
+  hold more anomalies than exist. The sweeps also report the share of ceiling (precision ÷ the
+  best possible precision), so rows with different ceilings can be compared.
 - **Ablation**, because each design choice should show what it is worth. On this data, rarity and
   the amount multiplier clearly help. The priors, the date collapse and the Benford scaling make
   no difference. That is reported as it is: the generator has no history for priors to encode,
