@@ -1,0 +1,139 @@
+' Portfolio sample for Caseware IDEA: Benford first-digit extraction, seldom accounts and
+' segregation of duties on the synthetic ledger.
+'
+' Every export keeps SR_NO, the row ID tagged before the ledger was split between IDEA and
+' Python, so the Python side can join the results exactly (glrisk.flags.load_idea_flags).
+'
+' Before running: import the ledger written by `python scripts/make_fixtures.py --ledger ledger.xlsx`
+' into the IDEA project and name the database as in LEDGER below. Field names are as IDEA
+' imports them (upper case, spaces as underscores).
+
+Const LEDGER = "Synthetic Ledger.IDM"
+Const ACCOUNT_FIELD = "ACCOUNT"
+Const CREATOR_FIELD = "CREATED_BY"
+Const APPROVER_FIELD = "APPROVED_BY"
+Const AMOUNT_EXPR = "(DEBIT + CREDIT)"   ' one side is always zero; for a signed ledger: "@Abs(AMOUNT)"
+Const BENFORD_DIGITS = "4"               ' digits to extract, read from the first-digit summary
+Const SELDOM_MAX = 3                     ' accounts with this many entries or fewer are "seldom"
+
+Global outputFolder
+
+Sub Main
+	outputFolder = Client.WorkingDirectory & "Exports.ILB\"
+	Call BenfordFirstDigit
+	Call SeldomAccounts
+	Call SegregationOfDuties
+	MsgBox "Done. The exports are in " & outputFolder
+End Sub
+
+' --- 1. Benford: count entries by first digit, then extract the digits chosen above ---
+Sub BenfordFirstDigit
+	Dim db, table, field, task, i, digit
+	Set db = Client.OpenDatabase(LEDGER)
+
+	' Virtual field with the first significant digit (0 for amounts under 10, which are left out)
+	Set field = db.TableDef.NewField
+	field.Name = "FIRST_DIGIT"
+	field.Description = "First significant digit of the amount"
+	field.Type = WI_VIRT_NUM
+	field.Equation = "@If(" & AMOUNT_EXPR & " >= 10, @Int(" & AMOUNT_EXPR & " / 10 ^ @Int(@Log10(" & AMOUNT_EXPR & "))), 0)"
+	field.Decimals = 0
+	Set table = db.TableManagement
+	table.AppendField field
+	table.PerformTask
+
+	' Entries per digit, to compare with Benford's expected shares (30.1% for 1 ... 4.6% for 9)
+	Set task = db.Summarization
+	task.AddFieldToSummarize "FIRST_DIGIT"
+	task.OutputDBName = "Benford First Digit Summary.IDM"
+	task.CreatePercentField = TRUE
+	task.PerformTask
+	Call ExportToExcel("Benford First Digit Summary.IDM")
+
+	' One extraction pass, one output per chosen digit
+	Set task = db.Extraction
+	task.IncludeAllFields
+	For i = 1 To Len(BENFORD_DIGITS)
+		digit = Mid(BENFORD_DIGITS, i, 1)
+		If digit >= "1" And digit <= "9" Then
+			task.AddExtraction "Benford Starting " & digit & ".IDM", "", "FIRST_DIGIT = " & digit
+		End If
+	Next i
+	task.PerformTask 1, db.Count
+	For i = 1 To Len(BENFORD_DIGITS)
+		digit = Mid(BENFORD_DIGITS, i, 1)
+		If digit >= "1" And digit <= "9" Then Call ExportToExcel("Benford Starting " & digit & ".IDM")
+	Next i
+End Sub
+
+' --- 2. Seldom accounts: summarise by account, then pull the entries of accounts used rarely ---
+Sub SeldomAccounts
+	Dim db, task, summary, rs, rec, accountIndex, countIndex, criteria, i
+	Set db = Client.OpenDatabase(LEDGER)
+
+	Set task = db.Summarization
+	task.AddFieldToSummarize ACCOUNT_FIELD
+	task.OutputDBName = "Account Summary.IDM"
+	task.CreatePercentField = FALSE
+	task.PerformTask
+	Call ExportToExcel("Account Summary.IDM")
+
+	' Read the summary row by row and build one criteria: ACCOUNT = "x" .OR. ACCOUNT = "y" ...
+	Set summary = Client.OpenDatabase("Account Summary.IDM")
+	accountIndex = FieldIndex(summary.TableDef, ACCOUNT_FIELD)
+	countIndex = FieldIndex(summary.TableDef, "NO_OF_RECS")
+	Set rs = summary.RecordSet
+	Set rec = rs.ActiveRecord
+	criteria = ""
+	rs.ToFirst
+	For i = 1 To summary.Count
+		rs.Next
+		If rec.GetNumValueAt(countIndex) <= SELDOM_MAX Then
+			If criteria <> "" Then criteria = criteria & " .OR. "
+			criteria = criteria & ACCOUNT_FIELD & " = """ & rec.GetCharValueAt(accountIndex) & """"
+		End If
+	Next i
+
+	If criteria = "" Then
+		MsgBox "No seldom accounts (none with " & SELDOM_MAX & " entries or fewer)."
+		Exit Sub
+	End If
+	Set task = db.Extraction
+	task.IncludeAllFields
+	task.AddExtraction "Seldom Account Entries.IDM", "", criteria
+	task.PerformTask 1, db.Count
+	Call ExportToExcel("Seldom Account Entries.IDM")
+End Sub
+
+' --- 3. Segregation of duties: entries created and approved by the same user ---
+Sub SegregationOfDuties
+	Dim db, task, creator, approver
+	Set db = Client.OpenDatabase(LEDGER)
+	' Compare trimmed and upper-cased, so "jsmith" and "JSMITH " count as the same user;
+	' a blank creator is not a violation
+	creator = "@Upper(@AllTrim(" & CREATOR_FIELD & "))"
+	approver = "@Upper(@AllTrim(" & APPROVER_FIELD & "))"
+	Set task = db.Extraction
+	task.IncludeAllFields
+	task.AddExtraction "SoD Violation Entries.IDM", "", creator & " = " & approver & " .AND. " & creator & " <> """""
+	task.PerformTask 1, db.Count
+	Call ExportToExcel("SoD Violation Entries.IDM")
+End Sub
+
+' --- Helpers ---
+Sub ExportToExcel(dbName)
+	Dim db, task
+	Set db = Client.OpenDatabase(dbName)
+	Set task = db.ExportDatabase
+	task.IncludeAllFields
+	task.PerformTask outputFolder & Left(dbName, Len(dbName) - 4) & ".XLSX", "Database", "XLSX", 1, db.Count, ""
+End Sub
+
+' Position (1-based) of a field in a table definition; 0 if it isn't there
+Function FieldIndex(tableDef, fieldName)
+	Dim i
+	FieldIndex = 0
+	For i = 1 To tableDef.Count
+		If tableDef.GetFieldAt(i).Name = fieldName Then FieldIndex = i
+	Next i
+End Function
