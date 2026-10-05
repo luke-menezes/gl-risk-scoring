@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "glrisk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cross-test risk scoring for general ledger journal analytics, on synthetic data"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ml = ["scikit-learn>=1.3"]
 dev = ["pytest>=7", "ruff>=0.4", "nbformat>=5", "nbconvert>=7", "ipykernel>=6"]
 
 [tool.setuptools.packages.find]
