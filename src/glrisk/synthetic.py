@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import holidays
 import numpy as np
 import pandas as pd
 
@@ -35,7 +34,6 @@ def make_ledger(
     anomaly_rate: float = 0.005,
     noise: bool = True,
     silent_share: float = 0.10,
-    country: str = "AE",
 ) -> pd.DataFrame:
     """
     Build a synthetic ledger, one row per journal line.
@@ -48,11 +46,11 @@ def make_ledger(
     tests and the scoring never read.
 
     A share of the anomalies (``silent_share``) carry no red flag at all: an
-    unusually large amount with cents, on a common account, on a working day
-    that isn't a public holiday, with an ordinary description and a different
-    approver. No test is built to find them, so they set a recall ceiling
-    below 1, as on real ledgers. Like any normal line, a silent anomaly can
-    still trip a test by chance (Benford's first digit, for example).
+    unusually large amount with cents, on a common account, on a weekday, with
+    an ordinary description and a different approver. No test is built to find
+    them, so they set a recall ceiling below 1, as on real ledgers. Like any
+    normal line, a silent anomaly can still trip a test by chance (Benford's
+    first digit, or a weekday that is a public holiday).
 
     Args:
         n_rows: Number of ledger lines before duplicates are added.
@@ -63,7 +61,6 @@ def make_ledger(
         anomaly_rate: Share of rows turned into injected anomalies.
         noise: Add the background false positives described above.
         silent_share: Share of the injected anomalies that carry no red flag.
-        country: Public holiday calendar the silent anomalies avoid (``holidays`` package).
 
     Returns:
         The ledger with ``Sr No`` (the row ID), ``Date``, ``Account``,
@@ -106,8 +103,8 @@ def make_ledger(
     n_anomalies = max(1, int(n_rows * anomaly_rate))
     rows = rng.choice(n_rows, size=n_anomalies, replace=False)
     weekends = days[days.dayofweek >= 5]
-    calendar = holidays.country_holidays(country, years=range(days[0].year, days[-1].year + 1))
-    working_days = days[(days.dayofweek < 5) & ~days.map(lambda d: d in calendar).to_numpy(bool)]
+    # Not filtered by a holiday calendar: the ledger must not change with the holidays package version
+    weekdays = days[days.dayofweek < 5]
     common_accounts = list(ACCOUNTS)
     n_silent = round(n_anomalies * silent_share)
     for i, row in enumerate(rows):
@@ -117,7 +114,7 @@ def make_ledger(
             if amount == round(amount):
                 amount += 0.37   # keep cents, so neither amount test can match
             df.loc[row, "_amount"] = amount
-            df.loc[row, "Date"] = rng.choice(working_days)
+            df.loc[row, "Date"] = rng.choice(weekdays)
             df.loc[row, "Account"] = rng.choice(common_accounts)
             df.loc[row, "Description"] = rng.choice(SILENT_DESCRIPTIONS)
             df.loc[row, "Approved By"] = rng.choice(APPROVERS)

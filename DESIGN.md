@@ -51,7 +51,7 @@ refuses IDs it can't find in the ledger, because a silent mismatch would drop fl
 
 The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads. Most
 carry one to four red flags. A tenth are "silent": an unusually large amount on a common account,
-on an ordinary working day, with nothing for any test to find. They keep the recall ceiling below
+on a weekday, with nothing for any test to find. They keep the recall ceiling below
 1, as it would be on real ledgers, and give the Isolation Forest something the rules can't see.
 `evaluate.run_once` generates a ledger, runs every test (the IDEA side in memory), scores it, and
 measures precision and recall at k for:
