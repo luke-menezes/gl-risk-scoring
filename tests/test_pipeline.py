@@ -27,6 +27,19 @@ def test_ledger_layouts_and_ground_truth(ledger):
         synthetic.make_ledger(10, layout="other")
 
 
+def test_silent_anomalies_carry_no_red_flag(ledger):
+    silent = ledger[ledger["Anomaly"] == "silent"]
+    assert len(silent) == 2          # 10% of 25, rounded
+    amt = synthetic.amount_columns(ledger)
+    for result in (rules.rounded_amounts(ledger, amt), rules.ending_99(ledger, amt),
+                   rules.public_holidays(ledger, "Date", amt), rules.keywords(ledger, ["Description"]),
+                   rules.seldom_accounts(ledger, "Account"),
+                   rules.segregation_of_duties(ledger, "Created By", "Approved By")):
+        assert not set(silent["Sr No"]) & set(result["Sr No"])
+    assert (pd.to_datetime(silent["Date"]).dt.dayofweek < 5).all()
+    assert (synthetic.make_ledger(5_000, seed=1, silent_share=0)["Anomaly"] == "silent").sum() == 0
+
+
 def test_same_seed_same_ledger():
     pd.testing.assert_frame_equal(synthetic.make_ledger(500, seed=3), synthetic.make_ledger(500, seed=3))
 

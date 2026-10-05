@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import holidays
 import numpy as np
 import pandas as pd
 
@@ -21,6 +22,8 @@ APPROVERS = ["manager_1", "manager_2"]
 ANOMALY_DESCRIPTIONS = ["Adjustment per director", "Write off - settlement", "Cash advance, no invoice",
                         "Correction entry - reversal", "Consultancy fee (related party)"]
 ANOMALY_SIGNALS = ("round_amount", "ending_99", "weekend", "keyword", "seldom_account", "self_approved")
+# Descriptions for silent anomalies: ordinary text that no keyword matches
+SILENT_DESCRIPTIONS = [d for d in DESCRIPTIONS if d != "Director fees"]
 
 
 def make_ledger(
@@ -31,6 +34,8 @@ def make_ledger(
     end: str = "2025-12-31",
     anomaly_rate: float = 0.005,
     noise: bool = True,
+    silent_share: float = 0.10,
+    country: str = "AE",
 ) -> pd.DataFrame:
     """
     Build a synthetic ledger, one row per journal line.
@@ -42,6 +47,13 @@ def make_ledger(
     and a larger amount, and are marked in the ``Anomaly`` column, which the
     tests and the scoring never read.
 
+    A share of the anomalies (``silent_share``) carry no red flag at all: an
+    unusually large amount with cents, on a common account, on a working day
+    that isn't a public holiday, with an ordinary description and a different
+    approver. No test is built to find them, so they set a recall ceiling
+    below 1, as on real ledgers. Like any normal line, a silent anomaly can
+    still trip a test by chance (Benford's first digit, for example).
+
     Args:
         n_rows: Number of ledger lines before duplicates are added.
         layout: ``"debit_credit"`` (Debit and Credit columns) or ``"signed"``
@@ -50,12 +62,14 @@ def make_ledger(
         start, end: Date range of the postings.
         anomaly_rate: Share of rows turned into injected anomalies.
         noise: Add the background false positives described above.
+        silent_share: Share of the injected anomalies that carry no red flag.
+        country: Public holiday calendar the silent anomalies avoid (``holidays`` package).
 
     Returns:
         The ledger with ``Sr No`` (the row ID), ``Date``, ``Account``,
         ``Description``, ``Created By``, ``Approved By``, the amount column(s)
         and ``Anomaly`` (the injected signals, e.g. ``"round_amount+weekend"``,
-        or ``""``).
+        ``"silent"``, or ``""``).
     """
     if layout not in ("debit_credit", "signed"):
         raise ValueError("layout must be 'debit_credit' or 'signed'")
@@ -92,11 +106,26 @@ def make_ledger(
     n_anomalies = max(1, int(n_rows * anomaly_rate))
     rows = rng.choice(n_rows, size=n_anomalies, replace=False)
     weekends = days[days.dayofweek >= 5]
+    calendar = holidays.country_holidays(country, years=range(days[0].year, days[-1].year + 1))
+    working_days = days[(days.dayofweek < 5) & ~days.map(lambda d: d in calendar).to_numpy(bool)]
+    common_accounts = list(ACCOUNTS)
+    n_silent = round(n_anomalies * silent_share)
     for i, row in enumerate(rows):
+        base = float(rng.choice([5, 10, 25])) * float(np.exp(7.5))
+        if i < n_silent:     # rows are already in random order
+            amount = round(base * rng.uniform(1, 4), 2)
+            if amount == round(amount):
+                amount += 0.37   # keep cents, so neither amount test can match
+            df.loc[row, "_amount"] = amount
+            df.loc[row, "Date"] = rng.choice(working_days)
+            df.loc[row, "Account"] = rng.choice(common_accounts)
+            df.loc[row, "Description"] = rng.choice(SILENT_DESCRIPTIONS)
+            df.loc[row, "Approved By"] = rng.choice(APPROVERS)
+            df.loc[row, "Anomaly"] = "silent"
+            continue
         signals = list(rng.choice(ANOMALY_SIGNALS, size=rng.integers(1, 5), replace=False))
         if "round_amount" in signals and "ending_99" in signals:
             signals.remove("ending_99")
-        base = float(rng.choice([5, 10, 25])) * float(np.exp(7.5))
         amount = round(base * rng.uniform(1, 4), 2)
         if "round_amount" in signals:
             amount = float(round(amount, -4) or 10_000)
