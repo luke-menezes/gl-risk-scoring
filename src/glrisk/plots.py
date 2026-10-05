@@ -87,3 +87,31 @@ def priority_amounts(priority: pd.DataFrame, amount_cols: Sequence[str], truth_c
     ax.legend(frameon=False)
     ax.spines[["top", "right"]].set_visible(False)
     return ax
+
+
+def precision_at_k_curve(curves: pd.DataFrame, default_k: int, ax: plt.Axes | None = None) -> plt.Axes:
+    """
+    Mean precision@k (over seeds) against k, one line per ranking, with the default list size marked.
+
+    ``curves`` has columns ``ranking``, ``k`` and ``precision mean`` (``evaluate.summarise(...,
+    default_k_only=False)``).
+    """
+    ax = ax or plt.subplots(figsize=(9, 5))[1]
+    styles = {"Risk score": {"color": ORANGE, "linewidth": 2.5},
+              "Number of tests hit": {"color": BLUE},
+              "Isolation Forest": {"color": "#8172B3"},
+              "Amount only": {"color": "#55A868"},
+              "Random flagged lines": {"color": GREY},
+              "Ceiling (flagged lines)": {"color": "black", "linestyle": ":"}}
+    for name, group in curves.groupby("ranking", sort=False):
+        ax.plot(group["k"], group["precision mean"], label=name, **{"linewidth": 1.5, **styles.get(name, {})})
+    ax.axvline(default_k, color=GREY, linestyle="--", linewidth=1)
+    ax.text(default_k, 0.02, f"  default list size ({default_k})", fontsize=9)
+    ax.set_ylim(0, 1.05)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.set_title("Precision of the top k lines (mean over seeds)")
+    ax.set_xlabel("k (lines reviewed)")
+    ax.set_ylabel("Share that are injected anomalies")
+    ax.legend(frameon=False, fontsize=9)
+    ax.spines[["top", "right"]].set_visible(False)
+    return ax

@@ -6,7 +6,7 @@ This is a portfolio project, but issues and suggestions are welcome.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,ml]"
 pytest
 ruff check .
 ```
@@ -19,5 +19,8 @@ ruff check .
   group (like the date tests), add its keyword to `scoring.DATE_KEYWORDS`.
 - If you change the generator or the IDEA mock, rebuild the fixtures with
   `python scripts/make_fixtures.py` and re-run `notebooks/demo.ipynb`.
+- If you change the tests or the scoring, re-run `python scripts/run_benchmark.py` (about 10
+  minutes; CI only runs a small version) and update the README's tables from
+  `docs/benchmark_results.md`.
 - Synthetic data only: no real ledgers, names or figures in issues, fixtures or examples.
 - Plain language and British spelling in docs.

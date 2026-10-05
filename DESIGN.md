@@ -49,11 +49,32 @@ refuses IDs it can't find in the ledger, because a silent mismatch would drop fl
 
 ## Evaluation
 
-The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads. The
-evaluation compares precision and recall at the list size for the risk score, the number of tests
-hit, amount alone and a random order. It shows whether the scoring does what it was designed to
-do on data built for that purpose. It isn't evidence about real ledgers, where the anomalies are
-unknown.
+The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads.
+`evaluate.run_once` generates a ledger, runs every test (the IDEA side in memory), scores it, and
+measures precision and recall at k for:
+
+- the risk score;
+- three baselines (number of tests hit, amount only, a random order of the flagged lines);
+- an Isolation Forest on simple line features;
+- the five ablation variants;
+- the ceiling.
+
+`scripts/run_benchmark.py` repeats this over 30 seeds and sweeps the ledger size and anomaly rate.
+
+- **Several seeds**, because one ledger can be lucky. The standard deviation shows how far results
+  move between ledgers.
+- **The ceiling**, because recall and precision only mean something next to the best achievable:
+  no ranking of flagged lines can find an anomaly that trips no test, and a list of k lines can't
+  hold more anomalies than exist.
+- **Ablation**, because each design choice should show what it is worth. On this data, rarity and
+  the amount multiplier clearly help. The priors, the date collapse and the Benford scaling make
+  no difference. That is reported as it is: the generator has no history for priors to encode,
+  rarely puts anomalies on two calendar signals at once, and produces almost no repeated amounts.
+- **Isolation Forest is unsupervised** and fitted with default settings on the ledger itself.
+  Tuning it on the injected labels would turn it into a supervised model and an unfair comparison.
+
+What the evaluation shows is whether the scoring does what it was designed to do, on data built
+for that purpose. It isn't evidence about real ledgers, where the anomalies are unknown.
 
 ## Out of scope
 
