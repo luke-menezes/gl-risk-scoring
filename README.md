@@ -183,7 +183,8 @@ project's `Exports.ILB` folder.
 
 ## About this project
 
-I built tooling like this in my work as a data analyst. This repository is a reduced, sanitised version on synthetic data. The production
-tooling and all client data stay private, and the scoring priors here are illustrative.
+I built tooling like this in my work as a data analyst. This repository is a reduced, sanitised
+version on synthetic data. The production tooling and all client data stay private, and the
+scoring priors here are illustrative.
 
 MIT licence.
