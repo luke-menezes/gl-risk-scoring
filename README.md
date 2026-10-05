@@ -7,7 +7,7 @@
 **Ranking flagged journal entries for audit review, on synthetic general ledgers.**
 
 On synthetic ledgers, the top-82 list is 83.7% precise (± 2.7 points over 30 seeds), against
-75.0% for counting how many tests each line hits and 63.7% for an Isolation Forest.
+75.0% for counting how many tests each line hits and 64.1% for an Isolation Forest.
 
 Journal entry testing in an audit runs a set of simple tests over the general ledger: weekend
 postings, round amounts, suspicious keywords, Benford's Law, seldom-used accounts, duplicates,
@@ -63,7 +63,7 @@ More detail in [`DESIGN.md`](DESIGN.md).
 
 Each ledger has 20,000 lines with 0.5% injected anomalies, all with a larger amount. Nine in ten
 carry one to four red flags; the other tenth are "silent", an unusual amount on a common account
-on an ordinary working day, with nothing for any test to find. Alongside them is normal business
+on a weekday, with nothing for any test to find. Alongside them is normal business
 that trips the tests anyway: round rent payments, director fees, a fixed-price supplier, weekend
 postings and double postings. The priority list is 82 lines. Figures are the mean ± standard deviation over 30 seeds (30 different
 ledgers), from `scripts/run_benchmark.py`; every run is in
@@ -73,17 +73,17 @@ ledgers), from `scripts/run_benchmark.py`; every run is in
 | Ranking | Precision@82 | Recall@82 |
 |---|---|---|
 | **Risk score** | **0.837 ± 0.027** | **0.686 ± 0.022** |
-| Number of tests hit | 0.750 ± 0.029 | 0.615 ± 0.024 |
-| Isolation Forest (unsupervised, line features) | 0.637 ± 0.061 | 0.522 ± 0.050 |
+| Number of tests hit | 0.750 ± 0.028 | 0.615 ± 0.023 |
+| Isolation Forest (unsupervised, line features) | 0.641 ± 0.058 | 0.526 ± 0.047 |
 | Amount only | 0.383 ± 0.044 | 0.314 ± 0.036 |
 | Random flagged lines | 0.026 ± 0.017 | 0.021 ± 0.014 |
-| Ceiling: best any ranking of flagged lines can do | 1.000 | 0.908 ± 0.008 |
+| Ceiling: best any ranking of flagged lines can do | 1.000 | 0.910 ± 0.008 |
 
 How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test,
 and precision can't exceed that count divided by k. The silent anomalies trip no test (apart from
-the odd chance hit, such as Benford's first digit), so no ranking of flagged lines can reach them
-and recall tops out at about 0.91. With 100 anomalies and a list of 82, recall is also capped at
-0.82 by the list size. The Isolation Forest ranks the whole ledger, so it could in principle find
+the odd chance hit, such as Benford's first digit or a public holiday), so no ranking of flagged
+lines can reach them and recall tops out at about 0.91. With 100 anomalies and a list of 82,
+recall is also capped at 0.82 by the list size. The Isolation Forest ranks the whole ledger, so it could in principle find
 silent anomalies through their amount, but it still ranks below the rules-based scores.
 
 ### Which design choices earn their place
@@ -107,11 +107,11 @@ ceilings can be compared. The size sweep keeps about 1.2 anomalies per list plac
 
 | Ledger | k | Risk score: precision@k (share of ceiling) | Tests hit: precision@k (share of ceiling) |
 |---|---|---|---|
-| 2,000 lines, 31 anomalies | 26 | 0.888 ± 0.063 (0.888) | 0.844 ± 0.082 (0.844) |
-| 20,000 lines, 100 anomalies | 82 | 0.837 ± 0.027 (0.837) | 0.750 ± 0.029 (0.750) |
+| 2,000 lines, 31 anomalies | 26 | 0.888 ± 0.063 (0.888) | 0.845 ± 0.083 (0.845) |
+| 20,000 lines, 100 anomalies | 82 | 0.837 ± 0.027 (0.837) | 0.750 ± 0.028 (0.750) |
 | 200,000 lines, 180 anomalies (10 seeds) | 150 | 0.737 ± 0.044 (0.737) | 0.557 ± 0.036 (0.557) |
-| 20,000 lines, 0.1% (20 anomalies) | 82 | 0.202 ± 0.013 (0.911) | 0.171 ± 0.020 (0.770) |
-| 20,000 lines, 0.2% (40 anomalies) | 82 | 0.395 ± 0.018 (0.889) | 0.339 ± 0.026 (0.763) |
+| 20,000 lines, 0.1% (20 anomalies) | 82 | 0.202 ± 0.013 (0.908) | 0.172 ± 0.020 (0.769) |
+| 20,000 lines, 0.2% (40 anomalies) | 82 | 0.395 ± 0.018 (0.884) | 0.339 ± 0.026 (0.759) |
 | 20,000 lines, 1.0% (200 anomalies, saturated) | 82 | 0.999 ± 0.003 (0.999) | 0.989 ± 0.022 (0.989) |
 
 The bigger the ledger, the harder the ranking gets, and the further the risk score pulls ahead of
