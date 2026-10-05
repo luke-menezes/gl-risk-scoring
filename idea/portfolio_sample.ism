@@ -29,18 +29,23 @@ End Sub
 ' --- 1. Benford: count entries by first digit, then extract the digits chosen above ---
 Sub BenfordFirstDigit
 	Dim db, table, field, task, i, digit
+	Dim tbl As Object
 	Set db = Client.OpenDatabase(LEDGER)
 
-	' Virtual field with the first significant digit (0 for amounts under 10, which are left out)
-	Set field = db.TableDef.NewField
-	field.Name = "FIRST_DIGIT"
-	field.Description = "First significant digit of the amount"
-	field.Type = WI_VIRT_NUM
-	field.Equation = "@If(" & AMOUNT_EXPR & " >= 10, @Int(" & AMOUNT_EXPR & " / 10 ^ @Int(@Log10(" & AMOUNT_EXPR & "))), 0)"
-	field.Decimals = 0
-	Set table = db.TableManagement
-	table.AppendField field
-	table.PerformTask
+	' Virtual field with the first significant digit (0 for amounts under 10, which are left out).
+	' A previous run leaves it in the ledger, so only add it when it is missing
+	Set tbl = db.TableDef
+	If FieldIndex(tbl, "FIRST_DIGIT") = 0 Then
+		Set field = tbl.NewField
+		field.Name = "FIRST_DIGIT"
+		field.Description = "First significant digit of the amount"
+		field.Type = WI_VIRT_NUM
+		field.Equation = "@If(" & AMOUNT_EXPR & " >= 10, @Int(" & AMOUNT_EXPR & " / 10 ^ @Int(@Log10(" & AMOUNT_EXPR & "))), 0)"
+		field.Decimals = 0
+		Set table = db.TableManagement
+		table.AppendField field
+		table.PerformTask
+	End If
 
 	' Entries per digit, to compare with Benford's expected shares (30.1% for 1 ... 4.6% for 9)
 	Set task = db.Summarization
@@ -68,7 +73,9 @@ End Sub
 
 ' --- 2. Seldom accounts: summarise by account, then pull the entries of accounts used rarely ---
 Sub SeldomAccounts
-	Dim db, task, summary, rs, rec, accountIndex, countIndex, criteria, i
+	Dim db, task, criteria, i
+	Dim summary As Object, tbl As Object, rs As Object, rec As Object
+	Dim accountIndex As Integer, countIndex As Integer
 	Set db = Client.OpenDatabase(LEDGER)
 
 	Set task = db.Summarization
@@ -80,8 +87,13 @@ Sub SeldomAccounts
 
 	' Read the summary row by row and build one criteria: ACCOUNT = "x" .OR. ACCOUNT = "y" ...
 	Set summary = Client.OpenDatabase("Account Summary.IDM")
-	accountIndex = FieldIndex(summary.TableDef, ACCOUNT_FIELD)
-	countIndex = FieldIndex(summary.TableDef, "NO_OF_RECS")
+	Set tbl = summary.TableDef
+	accountIndex = FieldIndex(tbl, ACCOUNT_FIELD)
+	countIndex = FieldIndex(tbl, "NO_OF_RECS")
+	If accountIndex = 0 Or countIndex = 0 Then
+		MsgBox "Account Summary has no " & ACCOUNT_FIELD & " or NO_OF_RECS field: check ACCOUNT_FIELD."
+		Exit Sub
+	End If
 	Set rs = summary.RecordSet
 	Set rec = rs.ActiveRecord
 	criteria = ""
@@ -129,11 +141,18 @@ Sub ExportToExcel(dbName)
 	task.PerformTask outputFolder & Left(dbName, Len(dbName) - 4) & ".XLSX", "Database", "XLSX", 1, db.Count, ""
 End Sub
 
-' Position (1-based) of a field in a table definition; 0 if it isn't there
-Function FieldIndex(tableDef, fieldName)
-	Dim i
+' Position (1-based) of a field in a table definition; 0 if it isn't there.
+' Keep the typed table, the Set field variable and the untyped name: other forms give
+' "Invalid field number" when the result is used
+Function FieldIndex(tbl As Object, fieldName) As Integer
+	Dim n As Integer
+	Dim fld As Object
 	FieldIndex = 0
-	For i = 1 To tableDef.Count
-		If tableDef.GetFieldAt(i).Name = fieldName Then FieldIndex = i
-	Next i
+	For n = 1 To tbl.Count
+		Set fld = tbl.GetFieldAt(n)
+		If fld.Name = fieldName Then
+			FieldIndex = n
+			Exit For
+		End If
+	Next n
 End Function
