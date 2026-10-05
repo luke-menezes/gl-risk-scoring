@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+# Ledgers written for IDEA by scripts/make_fixtures.py --ledger
+/ledger*.xlsx
+~$*
