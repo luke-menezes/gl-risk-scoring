@@ -52,9 +52,12 @@ def priority_list_size(n_rows: int, floor: int = 20, ceiling: int = 150, k: floa
 
 def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
                  date_tests: Sequence[str] | None = None, min_benford_factor: float = 0.2,
-                 amount_cols: Sequence[str] | None = None) -> tuple[dict[str, float], list[str], float]:
+                 amount_cols: Sequence[str] | None = None, use_rarity: bool = True, use_priors: bool = True,
+                 benford_scaling: bool = True) -> tuple[dict[str, float], list[str], float]:
     """
     Weight per test (rarity x prior, Benford scaled by amount diversity).
+
+    The ``use_*`` and ``benford_scaling`` switches turn one idea off at a time, for the ablation study.
 
     Returns:
         ``(weights, date_tests, benford_factor)``.
@@ -66,7 +69,7 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
         date_tests = [t for t in tests if any(k in t.lower() for k in DATE_KEYWORDS)]
 
     benford_factor = 1.0
-    if amount_cols:
+    if amount_cols and benford_scaling:
         amounts = absolute_amount(flagged, amount_cols)
         nonzero = amounts[amounts > 0]
         diversity = nonzero.round(2).nunique() / len(nonzero) if len(nonzero) else 1.0
@@ -74,8 +77,10 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
 
     weights = {}
     for test in tests:
-        rarity = -np.log10(max(counts.get(test, 0), 1) / n_rows)
-        if test in date_tests:
+        rarity = -np.log10(max(counts.get(test, 0), 1) / n_rows) if use_rarity else 1.0
+        if not use_priors:
+            prior = 1.0
+        elif test in date_tests:
             prior = priors["date"]
         else:
             prior = next((v for k, v in priors.items() if k != "date" and k in test.lower()), 1.0)
@@ -85,7 +90,9 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
 
 
 def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[str, float] | None = None,
-                top_n: int | str | None = "auto", date_tests: Sequence[str] | None = None) -> pd.DataFrame:
+                top_n: int | str | None = "auto", date_tests: Sequence[str] | None = None,
+                use_rarity: bool = True, use_priors: bool = True, collapse_dates: bool = True,
+                amount_multiplier: bool = True, benford_scaling: bool = True) -> pd.DataFrame:
     """
     Score and rank the output of ``consolidate`` (any ``min_flags``).
 
@@ -95,30 +102,49 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
         priors: Overrides for ``DEFAULT_PRIORS`` (same keyword keys).
         top_n: ``"auto"`` uses ``priority_list_size``; an int gives that many; ``None`` keeps every row.
         date_tests: Test names to treat as date tests (default: detected by ``DATE_KEYWORDS``).
+        use_rarity, use_priors, collapse_dates, amount_multiplier, benford_scaling: Each ``False``
+            turns one design choice off (ablation). Defaults: all on.
 
     Returns:
-        Rows sorted by ``Score`` (highest first), with ``Amount Multiplier`` and ``Score`` added and
-        the weights in ``.attrs["weights"]``.
+        Rows sorted by ``Score`` (highest first), with ``Base Score``, ``Amount Multiplier``,
+        ``Score`` and ``Score Breakdown`` added, and the weights in ``.attrs["weights"]``.
     """
     if "tests" not in flagged.attrs:
         raise ValueError("flagged must be the output of consolidate()")
-    weights, date_tests, factor = test_weights(flagged, priors, date_tests, amount_cols=amount_cols)
+    weights, date_tests, factor = test_weights(flagged, priors, date_tests, amount_cols=amount_cols,
+                                               use_rarity=use_rarity, use_priors=use_priors,
+                                               benford_scaling=benford_scaling)
+    if not collapse_dates:
+        date_tests = []
     other = [t for t in flagged.attrs["tests"] if t not in date_tests]
 
-    base = sum((flagged[t] * weights[t] for t in other), start=pd.Series(0.0, index=flagged.index))
+    parts = pd.DataFrame({t: flagged[t] * weights[t] for t in other}, index=flagged.index)
     if date_tests:
-        base = base + pd.DataFrame({t: flagged[t] * weights[t] for t in date_tests}).max(axis=1)
+        dates = pd.DataFrame({t: flagged[t] * weights[t] for t in date_tests}, index=flagged.index)
+        parts["date"] = dates.max(axis=1)
+        strongest = dates.idxmax(axis=1).where(parts["date"] > 0, "")
+    base = parts.sum(axis=1)
 
     amounts = absolute_amount(flagged, amount_cols)
     nonzero = amounts[amounts > 0]
     median = nonzero.median() if len(nonzero) else 1.0
     out = flagged.copy()
-    out["Amount Multiplier"] = (1 + np.log10(1 + amounts / median)).round(3)
+    out["Base Score"] = base.round(3)
+    out["Amount Multiplier"] = (1 + np.log10(1 + amounts / median)).round(3) if amount_multiplier else 1.0
     out["Score"] = (base * out["Amount Multiplier"]).round(3)
+
+    # "Seldom Account Entries 6.8 + date (Saturday) 1.0, × amount 2.10": why the line ranks where it does
+    def explain(i):
+        row = parts.loc[i]
+        terms = [f"{'date (' + strongest[i] + ')' if t == 'date' else t} {row[t]:.1f}"
+                 for t in row[row > 0].sort_values(ascending=False).index]   # largest first
+        return " + ".join(terms) + f", × amount {out.at[i, 'Amount Multiplier']:.2f}"
+
     out = out.sort_values(["Score", "N Flags"], ascending=False, kind="stable")
     if top_n == "auto":
         top_n = priority_list_size(flagged.attrs["n_rows"])
     if top_n is not None:
         out = out.head(int(top_n))
+    out["Score Breakdown"] = [explain(i) for i in out.index]
     out.attrs = {**flagged.attrs, "weights": weights, "date_tests": date_tests, "benford_factor": factor}
     return out
