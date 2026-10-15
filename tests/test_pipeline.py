@@ -257,6 +257,7 @@ def test_performance_materiality_lines_are_always_listed():
     assert set(flagged.loc[big, "Sr No"]) <= set(pm["Sr No"])
     assert pm.attrs["above_pm_added"] == len(pm) - 10 > 0
     assert pm["Above Performance Materiality"].tail(pm.attrs["above_pm_added"]).all()
+    assert scoring.score_flags(flagged, amt, top_n=None, performance_materiality=100_000).attrs["above_pm_added"] == 0
 
 
 def test_working_paper(tmp_path):

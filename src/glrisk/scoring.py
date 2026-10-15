@@ -161,6 +161,6 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
     out["Score Breakdown"] = [explain(i) for i in out.index]
     out.attrs = {**flagged.attrs, "weights": weights, "priors": used, "date_tests": date_tests,
                  "benford_factor": factor, "median_amount": float(median), "n_scored": len(flagged),
-                 "top_n": top_n, "above_pm_added": int(above.sum() - above.head(top_n or 0).sum()),
+                 "top_n": top_n, "above_pm_added": int(above.iloc[int(top_n):].sum()) if top_n is not None else 0,
                  "performance_materiality": performance_materiality, "clearly_trivial": clearly_trivial}
     return out

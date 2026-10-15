@@ -125,8 +125,8 @@ def make_ledger(
         df.loc[idx, "Description"] = "Supplier payment"
         # Routine system accruals and releases in the quarter-end windows, and system lines with no text
         quarter_days = days[(window == "Quarter end") & (days.dayofweek < 5)]
-        idx = rng.choice(n_rows, size=n_rows // 100, replace=False)
-        df.loc[idx, "Date"] = rng.choice(quarter_days, size=len(idx))
+        idx = rng.choice(n_rows, size=n_rows // 100 if len(quarter_days) else 0, replace=False)
+        df.loc[idx, "Date"] = rng.choice(quarter_days, size=len(idx)) if len(idx) else []
         df.loc[idx, "Source"] = "System"
         df.loc[idx, "Description"] = rng.choice(["Accrual", "Prepayment release"], size=len(idx))
         system = df.index[df["Source"] == "System"]
@@ -158,7 +158,7 @@ def make_ledger(
         signals = list(rng.choice(ANOMALY_SIGNALS, size=rng.integers(1, 5), replace=False))
         if "round_amount" in signals and "ending_99" in signals:
             signals.remove("ending_99")
-        if "weekend" in signals and "period_end" in signals:
+        if "period_end" in signals and ("weekend" in signals or not len(period_days)):
             signals.remove("period_end")
         if "keyword" in signals and "vague_narration" in signals:
             signals.remove("vague_narration")

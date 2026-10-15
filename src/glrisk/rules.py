@@ -16,8 +16,8 @@ import holidays
 import numpy as np
 import pandas as pd
 
-# Illustrative keyword list: generic red-flag words. Tune per client (some words are normal for some
-# businesses, e.g. "settlement" for a law firm).
+# Illustrative keyword list: generic words that often mark entries outside the normal process. Tune per
+# client (some words are normal for some businesses, e.g. "settlement" for a law firm).
 DEFAULT_KEYWORDS = ("adjust", "write off", "reversal", "correction", "director", "related party",
                     "cash advance", "settlement", "no invoice", "suspense")
 WEEKEND_DAYS = ("Saturday", "Sunday")   # the UAE weekend since 2022
