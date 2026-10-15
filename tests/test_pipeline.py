@@ -27,7 +27,7 @@ def test_ledger_layouts_and_ground_truth(ledger):
         synthetic.make_ledger(10, layout="other")
 
 
-def test_silent_anomalies_carry_no_red_flag(ledger):
+def test_silent_anomalies_carry_no_signal(ledger):
     silent = ledger[ledger["Anomaly"] == "silent"]
     assert len(silent) == 2          # 10% of 25, rounded
     amt = synthetic.amount_columns(ledger)

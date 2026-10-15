@@ -78,8 +78,8 @@ show them.
 
 `score_flags` takes optional `performance_materiality` and `clearly_trivial`, as the audit team set
 them at planning. Lines above performance materiality are always listed, after the top k and in
-addition to it, and labelled. Nothing below clearly trivial is filtered out of any test: fraudulent
-entries can be small, and splitting an amount into small entries is a known way round thresholds.
+addition to it, and labelled. Nothing below clearly trivial is filtered out of any test: fraud can sit
+in small entries, and splitting an amount into small entries is a known way round thresholds.
 Materiality guides presentation, not what is tested. Both are off by default, so the score, the
 amount multiplier and the benchmark don't use them.
 
@@ -135,9 +135,10 @@ every ranking looks perfect; a small one has too few to fill the list.
   hold more anomalies than exist. The sweeps also report the share of ceiling (precision ÷ the
   best possible precision), so rows with different ceilings can be compared.
 - **Ablation**, because each design choice should show what it is worth. On this data, rarity and
-  the amount multiplier clearly help. The priors, the date collapse and the Benford scaling make
-  no difference. That is reported as it is: the generator has no history for priors to encode,
-  rarely puts anomalies on two calendar signals at once, and produces almost no repeated amounts.
+  the amount multiplier clearly help. The priors add about 2 points, within one standard
+  deviation, and the date collapse and the Benford scaling make no difference. That is reported as
+  it is: the generator has no history for priors to encode, rarely puts anomalies on two calendar
+  signals at once, and produces almost no repeated amounts.
 - **Isolation Forest is unsupervised** and fitted with default settings on the ledger itself.
   Tuning it on the injected labels would turn it into a supervised model and an unfair comparison.
 

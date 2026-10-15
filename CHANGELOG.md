@@ -21,7 +21,10 @@ it covers and the auditor's use of it, and outputs state facts, not conclusions.
   didn't match its prior's keyword and it got 1.0.
 - **Generator**: a `Source` column, new injected signals (period end, manual, vague narration) and
   matching false positives; the Isolation Forest baseline gets the same new features.
-- **Benchmark re-run**: «CHANGELOG_BENCH»
+- **Benchmark re-run**: precision@82 is 0.838 ± 0.045 (0.837 ± 0.027 in 0.2.0), against
+  0.647 for counting tests (0.750) and 0.519 for the Isolation Forest (0.641). The lead over
+  counting tests grew mainly because counting tests got worse. With scarce anomalies the risk
+  score is further from its ceiling than before (0.83 to 0.85, against about 0.9).
 - **Docs**: README and DESIGN rewritten around the audit problem, with an "Audit context" table;
   the README's top-5 table is now printed by `scripts/make_fixtures.py`.
 
