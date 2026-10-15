@@ -1,7 +1,8 @@
-"""Cross-test risk scoring for general ledger journal analytics."""
+"""Ranking journal entries to support journal entry testing under ISA 240, on synthetic ledgers."""
 
-from . import benford, evaluate, flags, plots, rules, scoring, synthetic
+from . import benford, evaluate, export, flags, plots, population, rules, scoring, synthetic
 from .pipeline import run_python_tests
 
-__version__ = "0.2.0"
-__all__ = ["benford", "evaluate", "flags", "plots", "rules", "run_python_tests", "scoring", "synthetic"]
+__version__ = "0.3.0"
+__all__ = ["benford", "evaluate", "export", "flags", "plots", "population", "rules", "run_python_tests", "scoring",
+           "synthetic"]

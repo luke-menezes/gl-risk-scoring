@@ -1,9 +1,19 @@
-"""Synthetic general ledger with deliberately injected anomalies (the ground truth for evaluation)."""
+"""
+Synthetic general ledger with deliberately injected anomalies (the ground truth for evaluation).
+
+The injected anomalies exist only here: a real ledger has no such labels, and the tests never read
+them. On a real ledger the tests find characteristics of entries, for the auditor to select from.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import pandas as pd
+
+from .population import movements
+from .rules import period_end_labels
 
 ACCOUNTS = {
     "Cash at Bank": 0.22, "Accounts Receivable": 0.16, "Accounts Payable": 0.16, "Revenue": 0.12,
@@ -20,9 +30,15 @@ APPROVERS = ["manager_1", "manager_2"]
 # Description text used by injected anomalies (the keyword test should find these)
 ANOMALY_DESCRIPTIONS = ["Adjustment per director", "Write off - settlement", "Cash advance, no invoice",
                         "Correction entry - reversal", "Consultancy fee (related party)"]
-ANOMALY_SIGNALS = ("round_amount", "ending_99", "weekend", "keyword", "seldom_account", "self_approved")
+# Narrations that explain nothing: blank, placeholder, numbers only, too short, generic words only
+VAGUE_DESCRIPTIONS = ["", "n/a", "-", "104522", "JV", "Adj", "Misc", "Journal entry", "Being adjustment"]
+ANOMALY_SIGNALS = ("round_amount", "ending_99", "weekend", "keyword", "seldom_account", "self_approved",
+                   "period_end", "manual", "vague_narration")
 # Descriptions for silent anomalies: ordinary text that no keyword matches
 SILENT_DESCRIPTIONS = [d for d in DESCRIPTIONS if d != "Director fees"]
+# Income-statement accounts open the year at zero: last year's result moved to retained earnings
+INCOME_STATEMENT = ("Revenue", "Cost of Sales", "Payroll Expense", "Rent Expense", "Utilities", "Travel Expense",
+                    "Office Supplies")
 
 
 def make_ledger(
@@ -34,23 +50,29 @@ def make_ledger(
     anomaly_rate: float = 0.005,
     noise: bool = True,
     silent_share: float = 0.10,
+    manual_share: float = 0.15,
 ) -> pd.DataFrame:
     """
     Build a synthetic ledger, one row per journal line.
 
-    Normal lines have log-normal amounts with cents, mostly weekday dates and
-    a realistic amount of "noise": a few weekend postings, round amounts,
-    duplicates and keyword hits that are not anomalies. Injected anomalies
-    (about ``anomaly_rate`` of the rows) each carry one to four red flags
-    and a larger amount, and are marked in the ``Anomaly`` column, which the
-    tests and the scoring never read.
+    Normal lines have log-normal amounts with cents, mostly weekday dates, a
+    ``Source`` (mostly "System", about ``manual_share`` "Manual") and a
+    realistic amount of "noise": a few weekend postings, round amounts,
+    duplicates, keyword hits, routine system accruals at quarter ends and
+    system lines with no description, none of them anomalies. Injected
+    anomalies (about ``anomaly_rate`` of the rows) each carry one to four
+    signals and a larger amount, and are marked in the ``Anomaly`` column,
+    which the tests and the scoring never read. A weekend or round-amount
+    signal is always on a manual line, because those tests can be limited to
+    manual lines.
 
-    A share of the anomalies (``silent_share``) carry no red flag at all: an
-    unusually large amount with cents, on a common account, on a weekday, with
-    an ordinary description and a different approver. No test is built to find
-    them, so they set a recall ceiling below 1, as on real ledgers. Like any
-    normal line, a silent anomaly can still trip a test by chance (Benford's
-    first digit, or a weekday that is a public holiday).
+    A share of the anomalies (``silent_share``) carry no signal at all: an
+    unusually large amount with cents, on a common account, on a weekday
+    outside the period-end windows, from the system, with an ordinary
+    description and a different approver. No test is built to find them, so
+    they set a recall ceiling below 1, as on real ledgers. Like any normal
+    line, a silent anomaly can still trip a test by chance (Benford's first
+    digit, or a weekday that is a public holiday).
 
     Args:
         n_rows: Number of ledger lines before duplicates are added.
@@ -60,11 +82,12 @@ def make_ledger(
         start, end: Date range of the postings.
         anomaly_rate: Share of rows turned into injected anomalies.
         noise: Add the background false positives described above.
-        silent_share: Share of the injected anomalies that carry no red flag.
+        silent_share: Share of the injected anomalies that carry no signal.
+        manual_share: Share of normal lines entered by hand.
 
     Returns:
         The ledger with ``Sr No`` (the row ID), ``Date``, ``Account``,
-        ``Description``, ``Created By``, ``Approved By``, the amount column(s)
+        ``Description``, ``Created By``, ``Approved By``, ``Source``, the amount column(s)
         and ``Anomaly`` (the injected signals, e.g. ``"round_amount+weekend"``,
         ``"silent"``, or ``""``).
     """
@@ -74,6 +97,7 @@ def make_ledger(
 
     # Dates: weekdays mostly, weekends rare (about 1.5% of lines with noise on)
     days = pd.date_range(start, end, freq="D")
+    window = period_end_labels(pd.Series(days)).to_numpy()
     weights = np.where(days.dayofweek < 5, 1.0, 0.04 if noise else 0.0)
     dates = rng.choice(days, size=n_rows, p=weights / weights.sum())
 
@@ -85,6 +109,7 @@ def make_ledger(
         "Description": rng.choice(DESCRIPTIONS, size=n_rows, p=[0.096] * 10 + [0.04] if noise else None),
         "Created By": rng.choice(USERS, size=n_rows),
         "Approved By": rng.choice(APPROVERS, size=n_rows),
+        "Source": np.where(rng.random(n_rows) < manual_share, "Manual", "System"),
         "_amount": amounts,
         "_debit": is_debit,
         "Anomaly": "",
@@ -98,13 +123,22 @@ def make_ledger(
         idx = rng.choice(np.setdiff1d(np.arange(n_rows), idx), size=n_rows // 40, replace=False)
         df.loc[idx, "_amount"] = np.round(rng.uniform(4_000, 5_000, size=len(idx)), 2)
         df.loc[idx, "Description"] = "Supplier payment"
+        # Routine system accruals and releases in the quarter-end windows, and system lines with no text
+        quarter_days = days[(window == "Quarter end") & (days.dayofweek < 5)]
+        idx = rng.choice(n_rows, size=n_rows // 100 if len(quarter_days) else 0, replace=False)
+        df.loc[idx, "Date"] = rng.choice(quarter_days, size=len(idx)) if len(idx) else []
+        df.loc[idx, "Source"] = "System"
+        df.loc[idx, "Description"] = rng.choice(["Accrual", "Prepayment release"], size=len(idx))
+        system = df.index[df["Source"] == "System"]
+        df.loc[rng.choice(system, size=n_rows // 50, replace=False), "Description"] = ""
 
     # Injected anomalies: 1-4 signals each, and a larger than usual amount
     n_anomalies = max(1, int(n_rows * anomaly_rate))
     rows = rng.choice(n_rows, size=n_anomalies, replace=False)
     weekends = days[days.dayofweek >= 5]
     # Not filtered by a holiday calendar: the ledger must not change with the holidays package version
-    weekdays = days[days.dayofweek < 5]
+    weekdays = days[(days.dayofweek < 5) & (window == "")]
+    period_days = days[window != ""]
     common_accounts = list(ACCOUNTS)
     n_silent = round(n_anomalies * silent_share)
     for i, row in enumerate(rows):
@@ -118,21 +152,29 @@ def make_ledger(
             df.loc[row, "Account"] = rng.choice(common_accounts)
             df.loc[row, "Description"] = rng.choice(SILENT_DESCRIPTIONS)
             df.loc[row, "Approved By"] = rng.choice(APPROVERS)
+            df.loc[row, "Source"] = "System"
             df.loc[row, "Anomaly"] = "silent"
             continue
         signals = list(rng.choice(ANOMALY_SIGNALS, size=rng.integers(1, 5), replace=False))
         if "round_amount" in signals and "ending_99" in signals:
             signals.remove("ending_99")
+        if "period_end" in signals and ("weekend" in signals or not len(period_days)):
+            signals.remove("period_end")
+        if "keyword" in signals and "vague_narration" in signals:
+            signals.remove("vague_narration")
         amount = round(base * rng.uniform(1, 4), 2)
         if "round_amount" in signals:
             amount = float(round(amount, -4) or 10_000)
         if "ending_99" in signals:
             amount = float(int(amount) // 1000 * 1000 + 999)
         df.loc[row, "_amount"] = amount
-        if "weekend" in signals:
-            df.loc[row, "Date"] = rng.choice(weekends)
-        if "keyword" in signals:
-            df.loc[row, "Description"] = rng.choice(ANOMALY_DESCRIPTIONS)
+        df.loc[row, "Date"] = rng.choice(weekends if "weekend" in signals
+                                         else period_days if "period_end" in signals else weekdays)
+        df.loc[row, "Description"] = rng.choice(ANOMALY_DESCRIPTIONS if "keyword" in signals
+                                                else VAGUE_DESCRIPTIONS if "vague_narration" in signals
+                                                else SILENT_DESCRIPTIONS)
+        manual = {"manual", "weekend", "round_amount"} & set(signals)
+        df.loc[row, "Source"] = "Manual" if manual else "System"
         if "seldom_account" in signals:
             df.loc[row, "Account"] = f"Suspense Account {i // 2 + 1}"   # at most two entries per account
         if "self_approved" in signals:
@@ -154,7 +196,24 @@ def make_ledger(
     # The row ID is tagged once, before the ledger is split between IDEA and Python
     df.insert(0, "Sr No", np.arange(1, len(df) + 1))
     amount_cols = ["Debit", "Credit"] if layout == "debit_credit" else ["Amount"]
-    return df[["Sr No", "Date", "Account", "Description", "Created By", "Approved By", *amount_cols, "Anomaly"]]
+    return df[["Sr No", "Date", "Account", "Description", "Created By", "Approved By", "Source", *amount_cols,
+               "Anomaly"]]
+
+
+def make_trial_balance(ledger: pd.DataFrame, amount_cols: Sequence[str] | None = None, seed: int = 0,
+                       account_col: str = "Account") -> pd.DataFrame:
+    """
+    An opening and closing trial balance that the ledger rolls forward exactly, for the population check.
+
+    Balance-sheet accounts get a random opening balance; income-statement accounts open at zero.
+    Closing = opening + debits - credits per account, rounded to 2 decimals.
+    """
+    rng = np.random.default_rng(seed)
+    movement = movements(ledger, amount_cols or amount_columns(ledger), account_col)
+    opening = pd.Series(np.round(rng.normal(0, 250_000, len(movement)), 2), index=movement.index)
+    opening[opening.index.isin(INCOME_STATEMENT)] = 0.0
+    return pd.DataFrame({account_col: movement.index, "Opening": opening.to_numpy(),
+                         "Closing": (opening + movement).round(2).to_numpy()})
 
 
 def amount_columns(df: pd.DataFrame) -> list[str]:

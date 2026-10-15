@@ -23,4 +23,6 @@ ruff check .
   minutes; CI only runs a small version) and update the README's tables from
   `docs/benchmark_results.md`.
 - Synthetic data only: no real ledgers, names or figures in issues, fixtures or examples.
+- Word outputs as facts ("created and approved by the same user ID"), never as conclusions
+  ("violation", "fraudulent", "no issues found"). Selecting and concluding are the auditor's job.
 - Plain language and British spelling in docs.

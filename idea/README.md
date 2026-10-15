@@ -11,7 +11,7 @@ exports each result to Excel in the project's `Exports.ILB` folder:
 |---|---|---|
 | Benford first digit | Adds a `FIRST_DIGIT` virtual field, counts entries per digit, extracts the digits set in `BENFORD_DIGITS` | `Benford First Digit Summary`, `Benford Starting <d>` |
 | Seldom accounts | Summarises by account, reads the summary record by record, extracts the entries of accounts with 3 entries or fewer | `Account Summary`, `Seldom Account Entries` |
-| Segregation of duties | Extracts entries where creator and approver are the same user (trimmed, case ignored) | `SoD Violation Entries` |
+| Same user | Extracts entries created and approved by the same user ID (trimmed, case ignored) | `Same User Created and Approved` |
 
 Duplicates are usually checked in IDEA's own Duplicate Key Detection dialog, so they aren't in
 the macro. The mock fixtures include a `Duplicate` export to stand in for it.

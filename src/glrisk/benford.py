@@ -55,8 +55,8 @@ def benford_entries(df: pd.DataFrame, amount_cols: Sequence[str], top: int = 3, 
     A digit qualifies when its actual share is above the expected one with z above ``z_min``
     (significant at 5%), so a conforming ledger may return no rows at all.
 
-    These are the Benford "suspicious" rows that go into consolidation; the digit is added as
-    ``Benford Digit``.
+    These are the Benford rows that go into consolidation, as pointers for review rather than evidence
+    of error; the digit is added as ``Benford Digit``.
     """
     amount = absolute_amount(df, amount_cols)
     table = first_digit_test(amount[amount > 0])

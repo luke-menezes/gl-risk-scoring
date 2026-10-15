@@ -2,10 +2,20 @@
 
 ## The problem
 
-Each journal test is simple and easy to explain to an auditor, but each is noisy: weekend
+ISA 240 presumes a risk that management overrides controls, so the auditor tests journal entries
+whatever the risk assessment, and selects entries made at the end of the period among others. The
+standard lists characteristics worth selecting on, such as manual entries, round numbers,
+seldom-used accounts and entries with little or no description, but doesn't rank them. Each test
+here looks for one characteristic, and each is simple and easy to explain, but noisy: weekend
 postings happen, rent is a round number, payroll descriptions mention directors. Reviewing every
-flag is impossible, and reviewing only lines hit by several tests misses the single rare flag on
-a very large entry. The score has to rank lines in a way an auditor can follow and challenge.
+flagged line is impossible, and reviewing only lines hit by several tests misses the single rare
+characteristic on a very large entry. The score ranks lines in a way an auditor can follow and
+challenge, to help them select; selecting and concluding stay with the audit team. The README's
+"Audit context" table maps each test to the standard.
+
+Tests that **answer a risk** list entries the auditor can select from for a characteristic. Tests
+that **describe the ledger** summarise it without pointing at entries (Benford conformity, the
+account summary): they can be planning inputs, but they aren't findings.
 
 ## Score
 
@@ -26,11 +36,61 @@ For a line flagged by tests T:
   `scoring.DEFAULT_PRIORS`, matched by keyword in the test name, and can be overridden.
 - **Date tests count once.** Weekend days, public holidays and period-end windows overlap for
   calendar reasons. Adding them would let the calendar outweigh a genuine signal, so a line
-  gets only its strongest date test.
+  gets only its strongest date test. Period end has a higher prior (1.0) than the other date
+  tests (0.5), because the standard requires selecting period-end entries and doesn't for
+  weekends.
 - **Benford factor** = clip(distinct amounts / non-zero amounts / 0.5, 0.2, 1). Ledgers of repeated
   fixed prices fail Benford by construction; there the test says little about any one line.
 - **Amount multiplier.** No hard materiality cut-off: a line ten times the median gets about
   ×2.0, a hundred times about ×3.0.
+
+## The tests added in 0.3.0
+
+- **Period end.** Quarters are counted from the financial year-end, not assumed to be calendar
+  quarters. Each quarter end covers its last 3 and the next quarter's first 2 calendar days. The
+  year-end window is wider, 5 working days either side, because that is where the closing entries
+  are; it is counted in working days with the weekend test's weekend, so a weekend doesn't shorten
+  it. The output says which window each line fell in: quarter end, year end, or the opening
+  cut-off just after the prior year-end.
+- **Manual entries.** "Manual" is a fact from the client's system, confirmed by the audit team
+  (which sources or voucher types users key in), never a guess: without a source column the test
+  doesn't run, and the outputs say so. When the column exists, the weekend, holiday and
+  round-amount tests count manual lines only, because system postings on a Saturday or round
+  system charges are routine.
+- **No or vague narration.** Blank (including placeholders such as "n/a" and "-"), numbers only,
+  fewer than 3 letters, or only generic words ("adj", "journal", "misc", ...). If more than half the
+  lines are blank, the column isn't being used to explain entries: that is reported, and blank
+  lines aren't flagged, unless the test is run on manual lines only.
+
+Every threshold, window and word list is practical judgement, and a parameter.
+
+## Population first
+
+A test is only as good as its population. `population.roll_forward` checks, per account, that the
+opening trial balance plus the ledger's movements equals the closing trial balance. Amounts are
+rounded to their own decimals before comparing, with no other tolerance, and differences are
+totalled as absolutes so they can't net off. A difference means the ledger may be incomplete: it
+is resolved before any test or ranking, not explained away. Top-side adjustments made after the
+trial balance, directly in the financial statements, never reach the ledger, so this check can't
+show them.
+
+## Materiality
+
+`score_flags` takes optional `performance_materiality` and `clearly_trivial`, as the audit team set
+them at planning. Lines above performance materiality are always listed, after the top k and in
+addition to it, and labelled. Nothing below clearly trivial is filtered out of any test: fraud can sit
+in small entries, and splitting an amount into small entries is a known way round thresholds.
+Materiality guides presentation, not what is tested. Both are off by default, so the score, the
+amount multiplier and the benchmark don't use them.
+
+## The working paper
+
+`export.write_working_paper` writes the list as an Excel file an auditor can select and test from
+and a reviewer can follow: a cover (source, parameters, population, whether the list is complete or
+a top-k cut, the tests that couldn't run, blank preparer and reviewer), the lines with a plain "why
+selected" sentence and blank testing columns, and the method. The method sheet holds the weights
+and is marked internal to the audit team, because selection criteria the client can predict
+weaken the test.
 
 ## Priority list size
 
@@ -49,9 +109,10 @@ refuses IDs it can't find in the ledger, because a silent mismatch would drop fl
 
 ## Evaluation
 
-The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads. Most
-carry one to four red flags. A tenth are "silent": an unusually large amount on a common account,
-on a weekday, with nothing for any test to find. They keep the recall ceiling below
+The synthetic ledger marks injected anomalies in an `Anomaly` column that no test reads; real
+ledgers have no such labels. Most carry one to four signals, each a characteristic a test looks
+for. A tenth are "silent": an unusually large amount on a common account, on a weekday, with
+nothing for any test to find. They keep the recall ceiling below
 1, as it would be on real ledgers, and give the Isolation Forest something the rules can't see.
 `evaluate.run_once` generates a ledger, runs every test (the IDEA side in memory), scores it, and
 measures precision and recall at k for:
@@ -74,14 +135,24 @@ every ranking looks perfect; a small one has too few to fill the list.
   hold more anomalies than exist. The sweeps also report the share of ceiling (precision ÷ the
   best possible precision), so rows with different ceilings can be compared.
 - **Ablation**, because each design choice should show what it is worth. On this data, rarity and
-  the amount multiplier clearly help. The priors, the date collapse and the Benford scaling make
-  no difference. That is reported as it is: the generator has no history for priors to encode,
-  rarely puts anomalies on two calendar signals at once, and produces almost no repeated amounts.
+  the amount multiplier clearly help. The priors add about 2 points, within one standard
+  deviation, and the date collapse and the Benford scaling make no difference. That is reported as
+  it is: the generator has no history for priors to encode, rarely puts anomalies on two calendar
+  signals at once, and produces almost no repeated amounts.
 - **Isolation Forest is unsupervised** and fitted with default settings on the ledger itself.
   Tuning it on the injected labels would turn it into a supervised model and an unfair comparison.
 
 What the evaluation shows is whether the scoring does what it was designed to do, on data built
 for that purpose. It isn't evidence about real ledgers, where the anomalies are unknown.
+
+## Not done yet
+
+- **Scoring per journal (voucher), not per line.** A journal has at least two lines, so counting
+  lines overstates, and auditors select and test whole vouchers; this needs a generator that
+  writes multi-line journals.
+- **Post-closing entries**, created or edited after the period end, are among the entries the
+  revised standard calls most susceptible; testing them needs a created-at column the generator
+  doesn't have.
 
 ## Out of scope
 

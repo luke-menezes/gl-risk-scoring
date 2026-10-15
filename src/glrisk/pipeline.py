@@ -20,19 +20,43 @@ from .flags import FlagLog, log_flags
 
 def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: str = "Date",
                      text_cols: Sequence[str] = ("Description",), id_col: str = "Sr No",
-                     weekend_days: Sequence[str] = rules.WEEKEND_DAYS) -> FlagLog:
-    """Run the Python tests and return ``{test name: flagged IDs}``."""
+                     weekend_days: Sequence[str] = rules.WEEKEND_DAYS, source_col: str = "Source",
+                     manual_only: bool = True, fy_end_month: int = 12) -> FlagLog:
+    """
+    Run the Python tests and return ``{test name: flagged IDs}``.
+
+    When the ledger has ``source_col``, the manual-entry test runs, and with ``manual_only`` (the
+    default) the weekend, public holiday and round-amount tests count manual lines only: system
+    postings on a Saturday are routine. Without the column the manual-entry test doesn't run (see
+    ``tests_not_run``) and those three tests use every line.
+    """
+    manual = rules.manual_entries(ledger, source_col) if source_col in ledger.columns else None
+    scope = manual if manual is not None and manual_only else ledger
     results = {
-        "Suspicious Keyword": rules.keywords(ledger, text_cols),
-        "Rounded Amount": rules.rounded_amounts(ledger, amount_cols),
+        "Keyword Match": rules.keywords(ledger, text_cols),
+        "Rounded Amount": rules.rounded_amounts(scope, amount_cols),
         "Ending 99/999": rules.ending_99(ledger, amount_cols),
-        "Public Holiday": rules.public_holidays(ledger, date_col, amount_cols),
-        **{day: rules.day_of_week(ledger, date_col, amount_cols, day) for day in weekend_days},
+        "No or Vague Narration": rules.narration(ledger, text_cols[0]),
+        "Period End": rules.period_end(ledger, date_col, amount_cols, fy_end_month, weekend_days=weekend_days),
+        "Public Holiday": rules.public_holidays(scope, date_col, amount_cols),
+        **{day: rules.day_of_week(scope, date_col, amount_cols, day) for day in weekend_days},
+        **({"Manual Entry": manual} if manual is not None else {}),
     }
     flag_log: FlagLog = {}
     for name, result in results.items():
         log_flags(flag_log, name, result, id_col)
     return flag_log
+
+
+def tests_not_run(ledger: pd.DataFrame, source_col: str = "Source", creator_col: str = "Created By",
+                  approver_col: str = "Approved By") -> list[str]:
+    """
+    A statement for each test the ledger lacks a column for, e.g. "Manual entries not tested: no
+    Source column." Saying so matters: silence would read as "tested, nothing found".
+    """
+    needs = {"Manual entries": [source_col], "Created and approved by the same user": [creator_col, approver_col]}
+    return [f"{test} not tested: no {' or '.join(missing)} column."
+            for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
 
 
 def _idea_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -46,7 +70,8 @@ def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_
     """
     The IDEA macro's outputs, computed in Python: ``Benford Starting <d>`` (each significantly
     over-represented first digit, at most three), ``Account Summary``, ``Seldom Account Entries``,
-    ``Duplicate`` and ``SoD Violation Entries``. The ground-truth column is dropped first.
+    ``Duplicate`` and ``Same User Created and Approved`` (left out without a creator and an
+    approver column). The ground-truth column is dropped first.
     """
     data = ledger.drop(columns=["Anomaly"], errors="ignore")
     key_cols = list(key_cols or ["Date", account_col, "Description", *amount_cols])
@@ -60,7 +85,8 @@ def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_
                                   .reset_index())
     outputs["Seldom Account Entries"] = rules.seldom_accounts(data, account_col)
     outputs["Duplicate"] = rules.duplicates(data, key_cols)
-    outputs["SoD Violation Entries"] = rules.segregation_of_duties(data, creator_col, approver_col)
+    if {creator_col, approver_col} <= set(data.columns):
+        outputs["Same User Created and Approved"] = rules.segregation_of_duties(data, creator_col, approver_col)
     return outputs
 
 
