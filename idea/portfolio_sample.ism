@@ -122,14 +122,14 @@ Sub SegregationOfDuties
 	Dim db, task, creator, approver
 	Set db = Client.OpenDatabase(LEDGER)
 	' Compare trimmed and upper-cased, so "jsmith" and "JSMITH " count as the same user;
-	' a blank creator is not a violation
+	' a blank creator is not counted
 	creator = "@Upper(@AllTrim(" & CREATOR_FIELD & "))"
 	approver = "@Upper(@AllTrim(" & APPROVER_FIELD & "))"
 	Set task = db.Extraction
 	task.IncludeAllFields
-	task.AddExtraction "SoD Violation Entries.IDM", "", creator & " = " & approver & " .AND. " & creator & " <> """""
+	task.AddExtraction "Same User Created and Approved.IDM", "", creator & " = " & approver & " .AND. " & creator & " <> """""
 	task.PerformTask 1, db.Count
-	Call ExportToExcel("SoD Violation Entries.IDM")
+	Call ExportToExcel("Same User Created and Approved.IDM")
 End Sub
 
 ' --- Helpers ---

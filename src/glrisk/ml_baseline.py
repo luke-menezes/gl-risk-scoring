@@ -17,11 +17,13 @@ from . import rules
 
 def line_features(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: str = "Date",
                   account_col: str = "Account", text_cols: Sequence[str] = ("Description",),
-                  creator_col: str = "Created By", approver_col: str = "Approved By") -> pd.DataFrame:
+                  creator_col: str = "Created By", approver_col: str = "Approved By",
+                  source_col: str = "Source") -> pd.DataFrame:
     """
     One row of numeric features per ledger line: log amount, day of week, account frequency,
-    and 0/1 indicators for a keyword hit, a round amount, a 99/999 ending and the same user
-    creating and approving.
+    and 0/1 indicators for a keyword hit, a round amount, a 99/999 ending, the same user
+    creating and approving, a period-end date, no or vague narration and (with a source
+    column) a manual entry.
     """
     def hit(result: pd.DataFrame) -> np.ndarray:
         return ledger.index.isin(result.index).astype(int)
@@ -34,6 +36,9 @@ def line_features(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: st
         "round": hit(rules.rounded_amounts(ledger, amount_cols)),
         "ending_99": hit(rules.ending_99(ledger, amount_cols)),
         "same_user": hit(rules.segregation_of_duties(ledger, creator_col, approver_col)),
+        "period_end": hit(rules.period_end(ledger, date_col, amount_cols)),
+        "narration": hit(rules.narration(ledger, text_cols[0])),
+        "manual": hit(rules.manual_entries(ledger, source_col)) if source_col in ledger else 0,
     }, index=ledger.index)
 
 
