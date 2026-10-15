@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "glrisk"
-version = "0.2.0"
-description = "Cross-test risk scoring for general ledger journal analytics, on synthetic data"
+version = "0.3.0"
+description = "Ranking journal entries to support ISA 240 journal entry testing, on synthetic data"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Luke Menezes" }]
