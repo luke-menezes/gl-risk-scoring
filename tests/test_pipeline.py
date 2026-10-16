@@ -105,17 +105,28 @@ def test_manual_entries_and_manual_only_tests():
     assert pipeline.tests_not_run(df) == []
 
 
-def test_no_description_column():
-    ledger = synthetic.make_ledger(1_000, seed=0).drop(columns="Description")
+def test_missing_columns():
+    ledger = synthetic.make_ledger(1_000, seed=0).drop(columns=["Description", "Approved By"])
     amt = synthetic.amount_columns(ledger)
     log = pipeline.run_python_tests(ledger, amt)
     assert "Keyword Match" not in log and "No or Vague Narration" not in log and "Rounded Amount" in log
-    assert pipeline.tests_not_run(ledger) == ["No or vague narration not tested: no Description column.",
-                                              "Keyword match not tested: no Description column."]
+    assert pipeline.tests_not_run(ledger, amount_cols=amt) == [
+        "Created and approved by the same user not tested: no Approved By column.",
+        "No or vague narration not tested: no Description column.",
+        "Keyword match not tested: no Description column.",
+        "Duplicate test limited: no Description column, so lines are matched without it."]
     assert "Duplicate" in pipeline.idea_side_flags(ledger, amt)
     pytest.importorskip("sklearn")
     from glrisk.ml_baseline import line_features
-    assert (line_features(ledger, amt)[["keyword", "narration"]] == 0).all().all()
+    assert (line_features(ledger, amt)[["keyword", "narration", "same_user"]] == 0).all().all()
+
+
+def test_unreadable_values_are_stated():
+    df = small().astype({"Date": object, "Amount": object})
+    df.loc[0, "Date"], df.loc[1, "Amount"], df.loc[2, "Amount"] = "31/02/2025", "1,999.0x", " "
+    assert pipeline.tests_not_run(df, amount_cols=["Amount"]) == [
+        "Lines with a missing or unreadable date, not covered by the date tests: 1.",
+        "Lines with an unreadable amount, treated as zero and skipped by the amount and date tests: 1."]
 
 
 def test_narration():
@@ -307,7 +318,7 @@ def test_working_paper(tmp_path):
     assert list(sheets) == ["Cover", "Lines", "Method"]
     cover = dict(sheets["Cover"].iloc[1:].to_numpy())
     assert cover["Status"] == export.STATUS and cover["Extent"].startswith("Partial: the top 20 of")
-    assert cover["Not tested"].startswith("Manual entries not tested")
+    assert cover["Not tested or limited"].startswith("Manual entries not tested")
     lines = pd.read_excel(path, sheet_name="Lines")
     assert len(lines) == 20 and "Anomaly" not in lines and lines.columns[-6:].tolist() == export.TESTING_COLUMNS
     assert lines["Why Selected"].str.endswith(".").all() and lines[export.TESTING_COLUMNS].isna().all().all()

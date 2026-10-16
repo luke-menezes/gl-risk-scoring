@@ -51,10 +51,13 @@ def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col:
 
 
 def tests_not_run(ledger: pd.DataFrame, source_col: str = "Source", creator_col: str = "Created By",
-                  approver_col: str = "Approved By", text_cols: Sequence[str] = ("Description",)) -> list[str]:
+                  approver_col: str = "Approved By", text_cols: Sequence[str] = ("Description",),
+                  amount_cols: Sequence[str] = (), date_col: str = "Date",
+                  duplicate_key: Sequence[str] = ("Date", "Account", "Description")) -> list[str]:
     """
     A statement for each test the ledger lacks a column for, e.g. "Manual entries not tested: no
-    Source column." Saying so matters: silence would read as "tested, nothing found".
+    Source column.", each test run on fewer columns than usual, and the lines a test can't read.
+    Saying so matters: silence would read as "tested, nothing found".
     """
     needs = {"Manual entries": [source_col], "Created and approved by the same user": [creator_col, approver_col],
              "No or vague narration": [text_cols[0]]}
@@ -62,6 +65,13 @@ def tests_not_run(ledger: pd.DataFrame, source_col: str = "Source", creator_col:
            for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
     if not any(c in ledger.columns for c in text_cols):   # the keyword test needs any one of them
         out.append(f"Keyword match not tested: no {' or '.join(text_cols)} column.")
+    if missing := [c for c in duplicate_key if c not in ledger.columns]:
+        out.append(f"Duplicate test limited: no {' or '.join(missing)} column, so lines are matched without it.")
+    if date_col in ledger and (n := int(pd.to_datetime(ledger[date_col], errors="coerce").isna().sum())):
+        out.append(f"Lines with a missing or unreadable date, not covered by the date tests: {n:,}.")
+    raw = ledger[list(amount_cols)].replace(r"^\s*$", None, regex=True)   # blank amounts are zero, not unreadable
+    if n := int((raw.notna() & raw.apply(pd.to_numeric, errors="coerce").isna()).any(axis=1).sum()):
+        out.append(f"Lines with an unreadable amount, treated as zero and skipped by the amount and date tests: {n:,}.")
     return out
 
 
@@ -87,7 +97,7 @@ def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_
         outputs[f"Benford Starting {digit}"] = hits[hits["Benford Digit"] == digit].drop(columns="Benford Digit")
     amount = rules.absolute_amount(data, amount_cols)
     outputs["Account Summary"] = (data.assign(ABS_AMOUNT=amount).groupby(account_col)
-                                  .agg(NO_OF_RECS=("Sr No", "size"), ABS_AMOUNT_SUM=("ABS_AMOUNT", "sum"))
+                                  .agg(NO_OF_RECS=(account_col, "size"), ABS_AMOUNT_SUM=("ABS_AMOUNT", "sum"))
                                   .reset_index())
     outputs["Seldom Account Entries"] = rules.seldom_accounts(data, account_col)
     outputs["Duplicate"] = rules.duplicates(data, key_cols)

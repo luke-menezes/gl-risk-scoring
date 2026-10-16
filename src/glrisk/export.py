@@ -121,7 +121,7 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
                  "Large amount": f"{LARGE_MULTIPLE} times the median non-zero amount, used in \"why selected\" only "
                                  "when performance materiality isn't set (practical judgement)",
                  **(parameters or {})}.items()],
-             *[("Not tested", line) for line in not_run],
+             *[("Not tested or limited", line) for line in not_run],
              ("Date run (UTC)", datetime.now(timezone.utc).date().isoformat()), ("Prepared by", ""), ("Reviewed by", ""),
              ("Method", "See the Method sheet. " + METHOD_LABEL)]
 
