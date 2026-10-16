@@ -1,7 +1,7 @@
 # gl-risk-scoring
 
 [![tests](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml/badge.svg)](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml)
-![Python 3.10-3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+![Python 3.10-3.14](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 **Helping auditors select journal entries for testing under ISA 240: ranked, with the reasons, on
@@ -253,7 +253,7 @@ python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\a
 pip install -e ".[dev,ml]"                             # [ml] adds scikit-learn for the Isolation Forest
 pytest
 jupyter notebook notebooks/demo.ipynb
-python scripts/run_benchmark.py                        # about 30 minutes; --quick for a smoke test
+python scripts/run_benchmark.py                        # about 5 to 30 minutes; --quick for a smoke test
 ```
 
 ```python

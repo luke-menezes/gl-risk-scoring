@@ -204,6 +204,26 @@ def test_fixtures_load_and_scoring_beats_baselines():
     assert pipeline.idea_side_flags(ledger, amt) == idea
 
 
+def test_every_test_has_a_prior():
+    # A test whose name matches no prior key silently gets 1.0 (how the same-user prior went unused)
+    ledger = synthetic.make_ledger(20_000, seed=0)
+    amt = synthetic.amount_columns(ledger)
+    names = [*pipeline.run_python_tests(ledger, amt), *pipeline.idea_side_flags(ledger, amt)]
+    keys = [k for k in scoring.DEFAULT_PRIORS if k != "date"]
+    for name in names:
+        assert any(k in name.lower() for k in keys + list(scoring.DATE_KEYWORDS)), f"No prior key for {name!r}"
+
+
+def test_readme_top_5_matches_the_code():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    table = readme.split("### Why each line is on the list")[1].split("\n\n")[2]
+    listed = [int(row.split("|")[1]) for row in table.splitlines()[2:]]
+    ledger = synthetic.make_ledger(20_000, seed=0)
+    amt = synthetic.amount_columns(ledger)
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), flags.load_idea_flags(FIXTURES))
+    assert listed == scoring.score_flags(flagged, amt).head(5)["Sr No"].tolist()
+
+
 def test_score_breakdown_adds_up():
     ledger = synthetic.make_ledger(5_000, seed=2)
     amt = synthetic.amount_columns(ledger)

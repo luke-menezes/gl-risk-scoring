@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -18,3 +18,7 @@ jobs:
       - run: pip install -e ".[dev,ml]"
       - run: ruff check .
       - run: pytest -q
+      - name: Run the demo notebook
+        if: matrix.python-version == '3.14'
+        working-directory: notebooks   # the notebook reads the fixtures by a relative path
+        run: jupyter nbconvert --to notebook --execute --output /tmp/out.ipynb demo.ipynb
