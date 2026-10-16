@@ -42,7 +42,8 @@ def main() -> None:
 
     amt = synthetic.amount_columns(ledger)
     # The same parameters go to the tests and to the working paper, which recomputes details with them
-    run = {k: defaults(pipeline.run_python_tests)[k] for k in ("weekend_days", "fy_end_month", "holiday_country")}
+    run = {k: defaults(pipeline.run_python_tests)[k] for k in ("weekend_days", "fy_end_month", "holiday_country",
+                                                                  "keywords", "generic_words")}
     flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, **run), flags.load_idea_flags(FIXTURES))
     priority = scoring.score_flags(flagged, amt)
     windows, size = defaults(rules.period_end_labels), defaults(scoring.priority_list_size)
@@ -51,11 +52,10 @@ def main() -> None:
                                         "of the year-end",
                   "Weekend, holiday and round-amount tests": "manual lines only"
                   if defaults(pipeline.run_python_tests)["manual_only"] else "all lines",
-                  "Round amount": f"multiple of {defaults(rules.rounded_amounts)['multiple']:,}",
-                  "Keywords": ", ".join(rules.DEFAULT_KEYWORDS), "Generic narration words": ", ".join(rules.GENERIC_WORDS),
+                  "Round amount": f"multiple of {defaults(pipeline.run_python_tests)['round_multiple']:,}",
                   "List size": f"{size['k']} x square root of the ledger lines, within {size['floor']}-{size['ceiling']}"}
     export.write_working_paper(priority, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
-                               parameters, pipeline.tests_not_run(ledger), **run,
+                               parameters, pipeline.tests_not_run(ledger, amount_cols=amt), **run,
                                seldom_max_entries=defaults(rules.seldom_accounts)["max_entries"])
     print(f"Wrote {SAMPLE.relative_to(ROOT)}\n")
     print("| Sr No | Description | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")

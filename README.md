@@ -1,7 +1,7 @@
 # gl-risk-scoring
 
 [![tests](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml/badge.svg)](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml)
-![Python 3.10-3.14](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
+![Python 3.11-3.14](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 **Helping auditors select journal entries for testing under ISA 240: ranked, with the reasons, on
@@ -106,6 +106,10 @@ flowchart LR
   holiday and round-amount tests count manual lines only, because system postings on a Saturday are
   routine. Without one, the manual-entry test doesn't run and the outputs say so: "manual" is never
   guessed.
+- **Gaps are stated, never silent.** A test that can't run for lack of a column, a test run on
+  fewer columns than usual (duplicates without a description), and lines whose date or amount
+  can't be read are all listed on the working paper's cover. Silence would read as "tested,
+  nothing found".
 - **Benford scaled by amount diversity.** In ledgers of fixed fees or salaries, non-conformity is
   expected and says little about any one line, so Benford's weight shrinks with the share of
   distinct amounts.
@@ -224,7 +228,8 @@ account with 3 entries or fewer; a large amount (12 times the median)."
 
 - **Cover**: the status ("entries meeting the test criteria, for the audit team to consider; not
   audit findings"), source, parameters, population, whether the list is complete or a top-k cut,
-  the tests that couldn't run, the date run, and blank preparer and reviewer.
+  the tests that couldn't run or ran on fewer columns, lines with an unreadable date or amount, the
+  date run, and blank preparer and reviewer.
 - **Lines**: every listed line, with a plain "why selected" sentence next to the score breakdown,
   the period-end window, narration issue and matched keywords in their own columns to filter on,
   and blank columns for the audit team: Selected, Planned risk, Work done, Evidence ref, Tested by
@@ -252,7 +257,8 @@ and labelled; `clearly_trivial` is recorded on the cover and filters nothing.
 ```bash
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev,ml]"                             # [ml] adds scikit-learn for the Isolation Forest
-pytest
+#   add -c docs/benchmark-constraints.txt for the exact versions behind the published figures
+python -m pytest
 jupyter notebook notebooks/demo.ipynb
 python scripts/run_benchmark.py                        # about 5 to 30 minutes; --quick for a smoke test
 ```
@@ -269,7 +275,7 @@ flagged = flags.consolidate(ledger,
                             flags.load_idea_flags("fixtures/idea_exports"))
 priority = scoring.score_flags(flagged, amount_cols)          # top 0.577·√n lines, with Score Breakdown
 export.write_working_paper(priority, "priority_list.xlsx", amount_cols, "Synthetic ledger, seed 0",
-                           not_run=pipeline.tests_not_run(ledger))
+                           not_run=pipeline.tests_not_run(ledger, amount_cols=amount_cols))
 ```
 
 `fixtures/idea_exports` holds mock IDEA exports made from the same seeded ledger
@@ -290,7 +296,7 @@ project's `Exports.ILB` folder.
 | `src/glrisk/export.py` | The Excel working paper |
 | `src/glrisk/evaluate.py` | Rankings, ceilings, precision and recall at k, multi-seed runs and ablation |
 | `src/glrisk/ml_baseline.py` | Isolation Forest baseline (optional `[ml]` extra) |
-| `src/glrisk/pipeline.py` | Runs the Python tests, lists the tests that can't run; computes and writes the mock IDEA exports |
+| `src/glrisk/pipeline.py` | Runs the Python tests, lists the tests that can't run or are limited; computes and writes the mock IDEA exports |
 | `src/glrisk/plots.py` | The demo and benchmark charts |
 | `scripts/` | Fixture and sample builder, and the benchmark |
 | `idea/` | IDEAScript sample and the cross-tool design |

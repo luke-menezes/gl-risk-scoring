@@ -87,7 +87,8 @@ amount multiplier and the benchmark don't use them.
 
 `export.write_working_paper` writes the list as an Excel file an auditor can select and test from
 and a reviewer can follow: a cover (source, parameters, population, whether the list is complete or
-a top-k cut, the tests that couldn't run, blank preparer and reviewer), the lines with a plain "why
+a top-k cut, the tests that couldn't run or were limited, lines a test couldn't read, blank
+preparer and reviewer), the lines with a plain "why
 selected" sentence and blank testing columns, and the method. The method sheet holds the weights
 and is marked internal to the audit team, because selection criteria the client can predict
 weaken the test.

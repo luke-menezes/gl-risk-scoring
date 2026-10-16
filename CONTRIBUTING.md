@@ -7,7 +7,7 @@ This is a portfolio project, but issues and suggestions are welcome.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,ml]"
-pytest
+python -m pytest
 ruff check .
 ```
 
@@ -21,8 +21,8 @@ ruff check .
 - If you change the generator or the IDEA mock, rebuild the fixtures with
   `python scripts/make_fixtures.py` and re-run `notebooks/demo.ipynb`.
 - If you change the tests or the scoring, re-run `python scripts/run_benchmark.py` (about 5 to
-  30 minutes, depending on the machine; CI only runs a small version) and update the README's
-  tables from `docs/benchmark_results.md`.
+  30 minutes, depending on the machine; CI doesn't run it, only a one-ledger test of it) and
+  update the README's tables from `docs/benchmark_results.md`.
 - Synthetic data only: no real ledgers, names or figures in issues, fixtures or examples.
 - Word outputs as facts ("created and approved by the same user ID"), never as conclusions
   ("violation", "fraudulent", "no issues found"). Selecting and concluding are the auditor's job.

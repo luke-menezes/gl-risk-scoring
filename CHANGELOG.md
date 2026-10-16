@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.2
+
+Smaller fixes from a review of 0.3.1, and maintenance. The benchmark figures don't change.
+
+- **Gaps are stated**: `tests_not_run` also says when the duplicate test runs without a key
+  column (e.g. no Description), and how many lines have a missing or unreadable date (not
+  covered by the date tests) or an unreadable amount (treated as zero). The cover row is now
+  "Not tested or limited".
+- **Missing columns**: the Isolation Forest features no longer fail without a creator or
+  approver column, and the IDEA stand-in's account summary no longer relies on a `Sr No` column.
+- **Parameters**: `run_python_tests` takes `keywords`, `generic_words` and `round_multiple`;
+  `write_working_paper` takes the same lists, so the Lines columns can't disagree with the flags,
+  and states them on the cover.
+- **Python 3.11+**: 3.10 is end of life, and current pandas and numpy need 3.11. CI tests 3.11
+  to 3.14.
+- **Reproducibility**: `docs/benchmark-constraints.txt` pins the package versions behind the
+  published figures; Dependabot keeps the GitHub Actions versions current.
+- **Docs**: README "Gaps are stated" note, `python -m pytest`; CONTRIBUTING no longer says CI
+  runs the benchmark.
+
 ## 0.3.1
 
 Fixes found in a review of 0.3.0.
