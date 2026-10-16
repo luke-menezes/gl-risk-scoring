@@ -82,7 +82,7 @@ def priority_amounts(priority: pd.DataFrame, amount_cols: Sequence[str], truth_c
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(FuncFormatter(_compact))
     ax.set_title(f"Priority list ({len(priority)} lines): score and amount")
-    ax.set_xlabel("Amount (AED, log scale)")
+    ax.set_xlabel("Amount (log scale)")
     ax.set_ylabel("Score")
     ax.legend(frameon=False)
     ax.spines[["top", "right"]].set_visible(False)

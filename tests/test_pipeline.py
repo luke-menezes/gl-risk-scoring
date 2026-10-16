@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import openpyxl
 import pandas as pd
 import pytest
 
@@ -291,3 +292,12 @@ def test_working_paper(tmp_path):
     assert len(lines) == 20 and "Anomaly" not in lines and lines.columns[-6:].tolist() == export.TESTING_COLUMNS
     assert lines["Why Selected"].str.endswith(".").all() and lines[export.TESTING_COLUMNS].isna().all().all()
     assert sheets["Method"].iloc[0, 0] == export.METHOD_LABEL
+    # The facts the tests found, in their own columns, and the run's parameters on the cover
+    keyword_lines = lines["Matched Keywords"].notna()
+    assert keyword_lines.any() and lines.loc[keyword_lines, "Why Selected"].str.contains("keyword list").all()
+    assert {"Period-End Window", "Narration Issue"} <= set(lines.columns)
+    assert cover["Parameter: Public holidays"].startswith("AE calendar") and "Parameter: Large amount" in cover
+    assert (lines["Manual"] == "Yes").sum() == priority["Source"].str.casefold().eq("manual").sum()
+    # Filterable, frozen header, dates without a time
+    sheet = openpyxl.load_workbook(path)["Lines"]
+    assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref and sheet["B2"].number_format == "yyyy-mm-dd"

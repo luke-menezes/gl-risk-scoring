@@ -11,6 +11,7 @@ The ledger written for IDEA, and the sample, leave out the ground-truth "Anomaly
 from __future__ import annotations
 
 import argparse
+import inspect
 import shutil
 from pathlib import Path
 
@@ -19,6 +20,11 @@ from glrisk import export, flags, pipeline, rules, scoring, synthetic
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures" / "idea_exports"
 SAMPLE = ROOT / "docs" / "sample_priority_list.xlsx"
+
+
+def defaults(func) -> dict:
+    """A function's default arguments, so the cover states the values the run actually used."""
+    return {name: p.default for name, p in inspect.signature(func).parameters.items()}
 
 
 def main() -> None:
@@ -35,16 +41,22 @@ def main() -> None:
     print(f"Wrote {len(paths)} mock IDEA exports to {FIXTURES.relative_to(ROOT)}")
 
     amt = synthetic.amount_columns(ledger)
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), flags.load_idea_flags(FIXTURES))
+    # The same parameters go to the tests and to the working paper, which recomputes details with them
+    run = {k: defaults(pipeline.run_python_tests)[k] for k in ("weekend_days", "fy_end_month", "holiday_country")}
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, **run), flags.load_idea_flags(FIXTURES))
     priority = scoring.score_flags(flagged, amt)
-    parameters = {"Weekend days": ", ".join(rules.WEEKEND_DAYS), "Financial year-end": "31 December",
-                  "Period-end windows": "last 3 and first 2 days of each quarter; 5 working days either side "
-                                        "of the year-end", "Weekend, holiday and round-amount tests": "manual lines only",
-                  "Round amount": "multiple of 10,000", "Seldom-used account": "3 entries or fewer",
+    windows, size = defaults(rules.period_end_labels), defaults(scoring.priority_list_size)
+    parameters = {"Period-end windows": f"last {windows['quarter_days'][0]} and first {windows['quarter_days'][1]} "
+                                        f"days of each quarter; {windows['year_end_days']} working days either side "
+                                        "of the year-end",
+                  "Weekend, holiday and round-amount tests": "manual lines only"
+                  if defaults(pipeline.run_python_tests)["manual_only"] else "all lines",
+                  "Round amount": f"multiple of {defaults(rules.rounded_amounts)['multiple']:,}",
                   "Keywords": ", ".join(rules.DEFAULT_KEYWORDS), "Generic narration words": ", ".join(rules.GENERIC_WORDS),
-                  "List size": "0.577 x square root of the ledger lines, within 20-150"}
+                  "List size": f"{size['k']} x square root of the ledger lines, within {size['floor']}-{size['ceiling']}"}
     export.write_working_paper(priority, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
-                               parameters, pipeline.tests_not_run(ledger))
+                               parameters, pipeline.tests_not_run(ledger), **run,
+                               seldom_max_entries=defaults(rules.seldom_accounts)["max_entries"])
     print(f"Wrote {SAMPLE.relative_to(ROOT)}\n")
     print("| Sr No | Description | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")
     for _, row in priority.head(5).iterrows():

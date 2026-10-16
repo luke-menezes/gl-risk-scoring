@@ -34,7 +34,9 @@ para 40), so journal entries are tested whatever the assessed risk (240 para 32(
 The standards list characteristics of entries worth selecting (240 para A43; 240R Appendix 4) but
 don't rank them or prescribe tests. Each test here looks for one characteristic or supports the
 auditor in another way. "Practical judgement" marks a link that is my judgement rather than the
-standard's. Every threshold, window and keyword list is practical judgement.
+standard's. Every threshold, window and keyword list is practical judgement. By default the public
+holiday test uses the UAE calendar and the weekend is Saturday and Sunday; both are parameters
+(`holiday_country`, `weekend_days`) and are stated on the working paper's cover.
 
 **Tests that answer a risk**: each lists entries the auditor can select from.
 
@@ -223,6 +225,7 @@ account with 3 entries or fewer; a large amount (12 times the median)."
   audit findings"), source, parameters, population, whether the list is complete or a top-k cut,
   the tests that couldn't run, the date run, and blank preparer and reviewer.
 - **Lines**: every listed line, with a plain "why selected" sentence next to the score breakdown,
+  the period-end window, narration issue and matched keywords in their own columns to filter on,
   and blank columns for the audit team: Selected, Planned risk, Work done, Evidence ref, Tested by
   / date, Auditor's conclusion.
 - **Method**: the weights, marked "Internal to the audit team: not for the client". Selection
