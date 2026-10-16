@@ -13,7 +13,6 @@ import re
 from collections.abc import Iterable, Sequence
 
 import holidays
-import numpy as np
 import pandas as pd
 
 # Illustrative keyword list: generic words that often mark entries outside the normal process. Tune per
@@ -35,15 +34,16 @@ def absolute_amount(df: pd.DataFrame, amount_cols: Sequence[str]) -> pd.Series:
 
 def rounded_amounts(df: pd.DataFrame, amount_cols: Sequence[str], multiple: float = 10_000) -> pd.DataFrame:
     """Lines whose amount is a non-zero multiple of ``multiple`` (10,000 = four trailing zeros)."""
-    amount = absolute_amount(df, amount_cols)
-    return df[(amount > 0) & (np.isclose(amount % multiple, 0))]
+    # Rounded to cents first, so float noise from imports (29,999.999999) can't change the result
+    amount = absolute_amount(df, amount_cols).round(2)
+    return df[(amount > 0) & (amount % multiple == 0)]
 
 
 def ending_99(df: pd.DataFrame, amount_cols: Sequence[str]) -> pd.DataFrame:
-    """Lines with a whole amount ending in 99 or 999 (just under a round threshold)."""
-    amount = absolute_amount(df, amount_cols)
-    whole = np.isclose(amount, amount.round()) & (amount >= 99)
-    ends = amount.round().astype("int64").astype(str).str.endswith("99")
+    """Lines with a whole amount (no cents) ending in 99 or 999 (just under a round threshold)."""
+    amount = absolute_amount(df, amount_cols).round(2)
+    whole = (amount % 1 == 0) & (amount >= 99)
+    ends = amount.astype("int64").astype(str).str.endswith("99")
     return df[whole & ends]
 
 

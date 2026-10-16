@@ -31,13 +31,11 @@ def test_silent_anomalies_carry_no_signal(ledger):
     silent = ledger[ledger["Anomaly"] == "silent"]
     assert len(silent) == 2          # 10% of 25, rounded
     amt = synthetic.amount_columns(ledger)
-    # Public holidays aren't checked: a silent anomaly may land on one by chance
-    for result in (rules.rounded_amounts(ledger, amt), rules.ending_99(ledger, amt),
-                   rules.keywords(ledger, ["Description"]), rules.seldom_accounts(ledger, "Account"),
-                   rules.segregation_of_duties(ledger, "Created By", "Approved By"),
-                   rules.period_end(ledger, "Date", amt), rules.manual_entries(ledger),
-                   rules.narration(ledger, "Description")):
-        assert not set(silent["Sr No"]) & set(result["Sr No"])
+    # Silent anomalies are system lines, so the manual-only tests (weekend, holiday, round) can't
+    # reach them; only Benford's first digit can hit one by chance
+    log = {**pipeline.run_python_tests(ledger, amt, manual_only=True), **pipeline.idea_side_flags(ledger, amt)}
+    silent_ids = flags.id_set(silent["Sr No"])
+    assert {test for test, ids in log.items() if ids & silent_ids} <= {"Benford"}
     assert (pd.to_datetime(silent["Date"]).dt.dayofweek < 5).all()
     assert (synthetic.make_ledger(5_000, seed=1, silent_share=0)["Anomaly"] == "silent").sum() == 0
 
@@ -65,6 +63,10 @@ def test_amount_rules():
     df = small()
     assert rules.rounded_amounts(df, ["Amount"])["Sr No"].tolist() == [1, 5]
     assert rules.ending_99(df, ["Amount"])["Sr No"].tolist() == [2]
+    # Amounts with cents never end in 99, however large; float noise from imports doesn't matter
+    amounts = pd.DataFrame({"Sr No": range(5), "Amount": [35_599.30, 199.50, 1_999.00, 250_999.00, 29_999.999999]})
+    assert rules.ending_99(amounts, ["Amount"])["Sr No"].tolist() == [2, 3]
+    assert rules.rounded_amounts(amounts, ["Amount"])["Sr No"].tolist() == [4]
 
 
 def test_date_rules():
@@ -100,6 +102,19 @@ def test_manual_entries_and_manual_only_tests():
     assert "Manual Entry" not in pipeline.run_python_tests(no_source, ["Amount"])
     assert pipeline.tests_not_run(no_source) == ["Manual entries not tested: no Source column."]
     assert pipeline.tests_not_run(df) == []
+
+
+def test_no_description_column():
+    ledger = synthetic.make_ledger(1_000, seed=0).drop(columns="Description")
+    amt = synthetic.amount_columns(ledger)
+    log = pipeline.run_python_tests(ledger, amt)
+    assert "Keyword Match" not in log and "No or Vague Narration" not in log and "Rounded Amount" in log
+    assert pipeline.tests_not_run(ledger) == ["No or vague narration not tested: no Description column.",
+                                              "Keyword match not tested: no Description column."]
+    assert "Duplicate" in pipeline.idea_side_flags(ledger, amt)
+    pytest.importorskip("sklearn")
+    from glrisk.ml_baseline import line_features
+    assert (line_features(ledger, amt)[["keyword", "narration"]] == 0).all().all()
 
 
 def test_narration():

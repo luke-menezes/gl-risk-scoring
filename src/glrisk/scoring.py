@@ -58,14 +58,15 @@ def priority_list_size(n_rows: int, floor: int = 20, ceiling: int = 150, k: floa
 def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
                  date_tests: Sequence[str] | None = None, min_benford_factor: float = 0.2,
                  amount_cols: Sequence[str] | None = None, use_rarity: bool = True, use_priors: bool = True,
-                 benford_scaling: bool = True) -> tuple[dict[str, float], list[str], float, dict[str, float]]:
+                 benford_scaling: bool = True
+                 ) -> tuple[dict[str, float], list[str], float, dict[str, float], dict[str, float]]:
     """
     Weight per test (rarity x prior, Benford scaled by amount diversity).
 
     The ``use_*`` and ``benford_scaling`` switches turn one idea off at a time, for the ablation study.
 
     Returns:
-        ``(weights, date_tests, benford_factor, priors used per test)``.
+        ``(weights, date_tests, benford_factor, priors used per test, rarities used per test)``.
     """
     tests = flagged.attrs["tests"]
     counts, n_rows = flagged.attrs["test_counts"], flagged.attrs["n_rows"]
@@ -80,15 +81,16 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
         diversity = nonzero.round(2).nunique() / len(nonzero) if len(nonzero) else 1.0
         benford_factor = min(1.0, max(min_benford_factor, diversity / 0.5))
 
-    weights, used = {}, {}
+    weights, used, rarities = {}, {}, {}
     for test in tests:
         rarity = -np.log10(max(counts.get(test, 0), 1) / n_rows) if use_rarity else 1.0
         default = priors["date"] if test in date_tests else 1.0
         prior = next((v for k, v in priors.items() if k != "date" and k in test.lower()), default)
         used[test] = prior if use_priors else 1.0
+        rarities[test] = round(float(rarity), 3)
         weight = rarity * used[test] * (benford_factor if "benford" in test.lower() else 1.0)
         weights[test] = round(float(weight), 3)
-    return weights, list(date_tests), benford_factor, used
+    return weights, list(date_tests), benford_factor, used, rarities
 
 
 def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[str, float] | None = None,
@@ -120,9 +122,9 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
     """
     if "tests" not in flagged.attrs:
         raise ValueError("flagged must be the output of consolidate()")
-    weights, date_tests, factor, used = test_weights(flagged, priors, date_tests, amount_cols=amount_cols,
-                                               use_rarity=use_rarity, use_priors=use_priors,
-                                               benford_scaling=benford_scaling)
+    weights, date_tests, factor, used, rarities = test_weights(flagged, priors, date_tests, amount_cols=amount_cols,
+                                                         use_rarity=use_rarity, use_priors=use_priors,
+                                                         benford_scaling=benford_scaling)
     if not collapse_dates:
         date_tests = []
     other = [t for t in flagged.attrs["tests"] if t not in date_tests]
@@ -159,7 +161,7 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
     if performance_materiality is not None:
         out["Above Performance Materiality"] = above[out.index]
     out["Score Breakdown"] = [explain(i) for i in out.index]
-    out.attrs = {**flagged.attrs, "weights": weights, "priors": used, "date_tests": date_tests,
+    out.attrs = {**flagged.attrs, "weights": weights, "priors": used, "rarities": rarities, "date_tests": date_tests,
                  "benford_factor": factor, "median_amount": float(median), "n_scored": len(flagged),
                  "top_n": top_n, "above_pm_added": int(above.iloc[int(top_n):].sum()) if top_n is not None else 0,
                  "performance_materiality": performance_materiality, "clearly_trivial": clearly_trivial}

@@ -98,8 +98,7 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
     counts, n_rows, factor = a["test_counts"], a["n_rows"], a["benford_factor"]
     method = pd.DataFrame([{
         "Test": t, "Lines flagged": counts[t], "Share of ledger": round(counts[t] / n_rows, 4),
-        "Rarity": round(a["weights"][t] / a["priors"][t] / (factor if "benford" in t.lower() else 1), 3)
-        if a["priors"][t] else None,
+        "Rarity": a["rarities"][t],
         "Prior (illustrative)": a["priors"][t], "Weight": a["weights"][t],
         "Note": "; ".join(filter(None, ["date test: only the strongest counts" if t in a["date_tests"] else "",
                                         f"scaled by amount diversity ({factor:.2f})" if "benford" in t.lower() else ""])),
