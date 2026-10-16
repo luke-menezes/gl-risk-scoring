@@ -125,15 +125,15 @@ More detail in [`DESIGN.md`](DESIGN.md).
 
 ## Results on synthetic data
 
-Each ledger has 20,000 lines with 0.5% injected anomalies, all with a larger amount. These labels
-exist only in the synthetic data: a real ledger has none. Nine in ten anomalies carry one to four
-signals, each a characteristic a test looks for; the other tenth are "silent", an unusual amount on
-a common account on a weekday, from the system, with nothing for any test to find. Alongside them is
-normal business that trips the tests anyway: round rent payments, director fees, a fixed-price
-supplier, weekend postings, double postings, routine system accruals at quarter ends and system
-lines with no description. The priority list is 82 lines. Figures are the mean ± standard deviation
-over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`; every run is in
-[`docs/benchmark.csv`](docs/benchmark.csv), and the full tables are in
+Each ledger has 20,000 lines (plus 50 double postings) with 0.5% injected anomalies, all with a
+larger amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten
+anomalies carry one to four signals, each a characteristic a test looks for; the other tenth are
+"silent", an unusual amount on a common account on a weekday, from the system, with nothing for any
+test to find. Alongside them is normal business that trips the tests anyway: round rent payments,
+director fees, a fixed-price supplier, weekend postings, double postings, routine system accruals at
+quarter ends and system lines with no description. The priority list is 82 lines. Figures are the
+mean ± standard deviation over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`;
+every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full tables are in
 [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
 | Ranking | Precision@82 | Recall@82 |
@@ -145,13 +145,12 @@ over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`; every run
 | Random flagged lines | 0.010 ± 0.010 | 0.008 ± 0.008 |
 | Ceiling: best any ranking of flagged lines can do | 1.000 | 0.909 ± 0.008 |
 
-How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test,
-and precision can't exceed that count divided by k. The silent anomalies trip no test (apart from
-the odd chance hit, such as Benford's first digit or a public holiday), so no ranking of flagged
-lines can reach them and recall tops out at about 0.91. With 100 anomalies and a list of 82,
-recall is also capped at 0.82 by the list size. The Isolation Forest ranks the whole ledger, so it
-could in principle find silent anomalies through their amount, but it still ranks below the
-rules-based scores.
+How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test, and
+precision can't exceed that count divided by k. The silent anomalies trip no test (apart from the
+odd chance hit on Benford's first digit), so no ranking of flagged lines can reach them and recall
+tops out at about 0.91. With 100 anomalies and a list of 82, recall is also capped at 0.82 by the
+list size. The Isolation Forest ranks the whole ledger, so it could in principle find silent
+anomalies through their amount, but it still ranks below the rules-based scores.
 
 **Against 0.2.0.** The new tests and their false positives (manual entries are about 15% of the
 lines, the period-end windows about 9%) change the ledgers, so the figures aren't directly

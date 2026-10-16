@@ -150,12 +150,14 @@ for that purpose. It isn't evidence about real ledgers, where the anomalies are 
 - **Scoring per journal (voucher), not per line.** A journal has at least two lines, so counting
   lines overstates, and auditors select and test whole vouchers; this needs a generator that
   writes multi-line journals.
-- **Post-closing entries**, created or edited after the period end, are among the entries the
-  revised standard calls most susceptible; testing them needs a created-at column the generator
+- **Post-closing entries**, created or edited after the period end. The revised standard names
+  manual adjusting entries made after the period closes, with little or no support, among the
+  most susceptible (240R para A144); testing them needs a created-at column the generator
   doesn't have.
 
 ## Out of scope
 
-Reporting, and anything specific to one client's systems or file formats. The production tooling
-this is based on also handles debit/credit splits per test, configurable weekends, user analysis
-and run summaries; those are left out to keep the code small enough to read in one sitting.
+Anything specific to one client's systems or file formats. The production tooling this is based on
+also splits each test's results by debit and credit, analyses users, and writes run summaries;
+those are left out to keep the code small enough to read in one sitting. The working paper here is
+the only report.
