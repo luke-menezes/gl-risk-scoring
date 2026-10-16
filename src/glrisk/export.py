@@ -12,7 +12,7 @@ The priority list as an Excel working paper, with three sheets:
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import holidays
@@ -125,7 +125,7 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
                                  "when performance materiality isn't set (practical judgement)",
                  **(parameters or {})}.items()],
              *[("Not tested or limited", line) for line in not_run],
-             ("Date run (UTC)", datetime.now(timezone.utc).date().isoformat()), ("Prepared by", ""), ("Reviewed by", ""),
+             ("Date run (UTC)", datetime.now(UTC).date().isoformat()), ("Prepared by", ""), ("Reviewed by", ""),
              ("Method", "See the Method sheet. " + METHOD_LABEL)]
 
     counts, n_rows, factor = a["test_counts"], a["n_rows"], a["benford_factor"]

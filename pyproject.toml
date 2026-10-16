@@ -9,7 +9,7 @@ description = "Ranking journal entries to support ISA 240 journal entry testing,
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Luke Menezes" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.24",
     "pandas>=2.0",
@@ -30,4 +30,4 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py311"

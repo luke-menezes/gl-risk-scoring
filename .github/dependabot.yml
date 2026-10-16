@@ -1,0 +1,9 @@
+# Keeps the GitHub Actions versions in the workflow up to date. Python packages are left out on
+# purpose: their versions are behind the published benchmark figures (docs/benchmark-constraints.txt),
+# so they are upgraded by hand, with a benchmark re-run.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
