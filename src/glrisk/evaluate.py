@@ -40,7 +40,8 @@ def rankings(scored: pd.DataFrame, ledger: pd.DataFrame, amount_cols: Sequence[s
     """
     by_tests = scored.assign(_amt=absolute_amount(scored, amount_cols)).sort_values(
         ["N Flags", "_amt"], ascending=False, kind="stable")
-    by_amount = ledger.assign(_amt=absolute_amount(ledger, amount_cols)).sort_values("_amt", ascending=False)
+    by_amount = ledger.assign(_amt=absolute_amount(ledger, amount_cols)).sort_values("_amt", ascending=False,
+                                                                                     kind="stable")
     out = {
         "Risk score": scored[id_col].tolist(),
         "Number of tests hit": by_tests[id_col].tolist(),

@@ -28,16 +28,17 @@ def line_features(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: st
     def hit(result: pd.DataFrame) -> np.ndarray:
         return ledger.index.isin(result.index).astype(int)
 
+    text = [c for c in text_cols if c in ledger]   # without text, the text features are 0
     return pd.DataFrame({
         "log_amount": np.log1p(rules.absolute_amount(ledger, amount_cols)),
         "day_of_week": pd.to_datetime(ledger[date_col]).dt.dayofweek,
         "account_frequency": ledger[account_col].map(ledger[account_col].value_counts(normalize=True)),
-        "keyword": hit(rules.keywords(ledger, text_cols)),
+        "keyword": hit(rules.keywords(ledger, text)) if text else 0,
         "round": hit(rules.rounded_amounts(ledger, amount_cols)),
         "ending_99": hit(rules.ending_99(ledger, amount_cols)),
         "same_user": hit(rules.segregation_of_duties(ledger, creator_col, approver_col)),
         "period_end": hit(rules.period_end(ledger, date_col, amount_cols)),
-        "narration": hit(rules.narration(ledger, text_cols[0])),
+        "narration": hit(rules.narration(ledger, text_cols[0])) if text_cols[0] in ledger else 0,
         "manual": hit(rules.manual_entries(ledger, source_col)) if source_col in ledger else 0,
     }, index=ledger.index)
 

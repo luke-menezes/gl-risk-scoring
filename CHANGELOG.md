@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.1
+
+Fixes found in a review of 0.3.0.
+
+- **Ending 99/999**: the test counted large amounts with cents as whole (35,599.30 was flagged,
+  and above about 100,000 any amount whose rounded value ends in 99), so it flagged nearly twice
+  the lines it should. It now requires zero cents. Re-run over 30 seeds: risk score 0.846 ± 0.043
+  (0.838 ± 0.045 in 0.3.0), counting tests 0.646 (0.647), Isolation Forest 0.511 (0.519); the
+  200,000-line sweep rose most (0.767 against 0.737). The rounded-amount test also rounds to
+  cents first, so float noise from imports can't change it.
+- **No Description column**: the keyword and narration tests are skipped and stated as not run,
+  instead of raising an error.
+- **Working paper**: the period-end window, narration issue and matched keywords get their own
+  columns; Manual matches the source values as the manual-entry test does; the cover states the
+  year-end, weekend, holiday calendar, manual values, seldom threshold and large-amount rule,
+  built from the run's parameters; dates without a time, a frozen header and filters; the Method
+  sheet shows the rarities used.
+- **Parameters**: `holiday_country` on `run_python_tests`; `weekend_days`, `manual_values` and
+  the seldom threshold on `write_working_paper`. The README states the defaults (UAE holidays, a
+  Saturday-Sunday weekend).
+- **Guards**: tests check that every built-in test matches a prior key and that the README's top
+  5 match the code. CI runs Python 3.10 to 3.14 and executes the demo notebook.
+- **Reproducibility**: the benchmark records the library versions, and the "Amount only"
+  baseline sorts ties stably.
+- **Docs**: DESIGN's out-of-scope and post-closing paragraphs corrected (240R para A144); silent
+  anomalies can only hit Benford by chance; the ledger size is 20,000 lines plus 50 double postings.
+
 ## 0.3.0
 
 Realigned with journal entry testing under ISA 240: each test is described by the characteristic

@@ -1,7 +1,7 @@
 # gl-risk-scoring
 
 [![tests](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml/badge.svg)](https://github.com/luke-menezes/gl-risk-scoring/actions/workflows/tests.yml)
-![Python 3.10-3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+![Python 3.10-3.14](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 **Helping auditors select journal entries for testing under ISA 240: ranked, with the reasons, on
@@ -17,8 +17,8 @@ ID and ranks the lines with a transparent score, to help the auditor select, and
 is on the list. It supports the auditor's journal entry testing; it doesn't perform it. Selecting
 entries and concluding on them stay with the audit team.
 
-On synthetic ledgers, the top-82 list is 83.8% precise (± 4.5 points over 30 seeds),
-against 64.7% for counting how many tests each line hits and 51.9% for an Isolation Forest.
+On synthetic ledgers, the top-82 list is 84.6% precise (± 4.3 points over 30 seeds),
+against 64.6% for counting how many tests each line hits and 51.1% for an Isolation Forest.
 
 **Population first.** Ranking should wait until the population is confirmed complete. Per account,
 the opening trial balance plus the ledger's movements must equal the closing trial balance;
@@ -34,7 +34,9 @@ para 40), so journal entries are tested whatever the assessed risk (240 para 32(
 The standards list characteristics of entries worth selecting (240 para A43; 240R Appendix 4) but
 don't rank them or prescribe tests. Each test here looks for one characteristic or supports the
 auditor in another way. "Practical judgement" marks a link that is my judgement rather than the
-standard's. Every threshold, window and keyword list is practical judgement.
+standard's. Every threshold, window and keyword list is practical judgement. By default the public
+holiday test uses the UAE calendar and the weekend is Saturday and Sunday; both are parameters
+(`holiday_country`, `weekend_days`) and are stated on the working paper's cover.
 
 **Tests that answer a risk**: each lists entries the auditor can select from.
 
@@ -113,7 +115,7 @@ flowchart LR
   ledger, never more than a reviewer can work through.
 
 **What the benchmark can and can't show.** On the synthetic ledgers, per-ledger rarity and the amount
-multiplier clearly earn their place (about 6 and 7 points). The illustrative priors add about 2
+multiplier clearly earn their place (about 6.5 and 7 points). The illustrative priors add about 2
 points over rarity alone, within one standard deviation, and the date collapse and the Benford
 scaling make no measurable difference. The synthetic data can't test these three: it has no history
 for priors to encode, few lines where calendar tests stack, and almost no repeated amounts. They
@@ -123,41 +125,42 @@ More detail in [`DESIGN.md`](DESIGN.md).
 
 ## Results on synthetic data
 
-Each ledger has 20,000 lines with 0.5% injected anomalies, all with a larger amount. These labels
-exist only in the synthetic data: a real ledger has none. Nine in ten anomalies carry one to four
-signals, each a characteristic a test looks for; the other tenth are "silent", an unusual amount on
-a common account on a weekday, from the system, with nothing for any test to find. Alongside them is
-normal business that trips the tests anyway: round rent payments, director fees, a fixed-price
-supplier, weekend postings, double postings, routine system accruals at quarter ends and system
-lines with no description. The priority list is 82 lines. Figures are the mean ± standard deviation
-over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`; every run is in
-[`docs/benchmark.csv`](docs/benchmark.csv), and the full tables are in
+Each ledger has 20,000 lines (plus 50 double postings) with 0.5% injected anomalies, all with a
+larger amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten
+anomalies carry one to four signals, each a characteristic a test looks for; the other tenth are
+"silent", an unusual amount on a common account on a weekday, from the system, with nothing for any
+test to find. Alongside them is normal business that trips the tests anyway: round rent payments,
+director fees, a fixed-price supplier, weekend postings, double postings, routine system accruals at
+quarter ends and system lines with no description. The priority list is 82 lines. Figures are the
+mean ± standard deviation over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`;
+every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full tables are in
 [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
 | Ranking | Precision@82 | Recall@82 |
 |---|---|---|
-| **Risk score** | **0.838 ± 0.045** | **0.687 ± 0.036** |
-| Number of tests hit | 0.647 ± 0.056 | 0.531 ± 0.046 |
-| Isolation Forest (unsupervised, line features) | 0.519 ± 0.051 | 0.426 ± 0.042 |
+| **Risk score** | **0.846 ± 0.043** | **0.694 ± 0.035** |
+| Number of tests hit | 0.646 ± 0.056 | 0.530 ± 0.046 |
+| Isolation Forest (unsupervised, line features) | 0.511 ± 0.050 | 0.419 ± 0.041 |
 | Amount only | 0.389 ± 0.053 | 0.319 ± 0.043 |
-| Random flagged lines | 0.010 ± 0.010 | 0.008 ± 0.008 |
-| Ceiling: best any ranking of flagged lines can do | 1.000 | 0.909 ± 0.008 |
+| Random flagged lines | 0.012 ± 0.013 | 0.010 ± 0.011 |
+| Ceiling: best any ranking of flagged lines can do | 1.000 | 0.908 ± 0.007 |
 
-How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test,
-and precision can't exceed that count divided by k. The silent anomalies trip no test (apart from
-the odd chance hit, such as Benford's first digit or a public holiday), so no ranking of flagged
-lines can reach them and recall tops out at about 0.91. With 100 anomalies and a list of 82,
-recall is also capped at 0.82 by the list size. The Isolation Forest ranks the whole ledger, so it
-could in principle find silent anomalies through their amount, but it still ranks below the
-rules-based scores.
+How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test, and
+precision can't exceed that count divided by k. The silent anomalies trip no test (apart from the
+odd chance hit on Benford's first digit), so no ranking of flagged lines can reach them and recall
+tops out at about 0.91. With 100 anomalies and a list of 82, recall is also capped at 0.82 by the
+list size. The Isolation Forest ranks the whole ledger, so it could in principle find silent
+anomalies through their amount, but it still ranks below the rules-based scores.
 
 **Against 0.2.0.** The new tests and their false positives (manual entries are about 15% of the
 lines, the period-end windows about 9%) change the ledgers, so the figures aren't directly
-comparable. The risk score's precision is about the same (0.838 against 0.837), with more spread
-between ledgers (± 0.045 against ± 0.027). Its lead over counting tests grew from 9 points to 19,
-but mostly because counting tests got worse (0.647 against 0.750): two broad tests add a hit to
-many ordinary lines. The Isolation Forest fell too (0.519 against 0.641). When anomalies are
-scarce, the risk score is further from its ceiling than in 0.2.0 (see the sweeps).
+comparable. The risk score's precision is slightly higher (0.846 against 0.837), with more spread
+between ledgers (± 0.043 against ± 0.027). Its lead over counting tests grew from 9 points to 20,
+but mostly because counting tests got worse (0.646 against 0.750): two broad tests add a hit to
+many ordinary lines. The Isolation Forest fell too (0.511 against 0.641). When anomalies are
+scarce, the risk score is further from its ceiling than in 0.2.0 (see the sweeps). The 0.3.0
+figures (0.838) included a bug in the 99/999 test, which flagged large amounts with cents; fixing
+it in 0.3.1 added about 1 point to the risk score and left counting tests unchanged.
 
 ### Which design choices earn their place
 
@@ -165,12 +168,12 @@ The same 30 ledgers, scored with one idea switched off at a time:
 
 | Variant | Precision@82 | What it shows |
 |---|---|---|
-| Full risk score | 0.838 ± 0.045 | |
-| Rarity only (all priors = 1) | 0.820 ± 0.043 | The illustrative priors add about 2 points, within one standard deviation: the synthetic data has no history for them to encode. Their job on real ledgers is to carry what past engagements showed |
-| Priors only (no rarity) | 0.779 ± 0.039 | Per-ledger rarity is worth about 6 points |
-| Date tests not collapsed | 0.839 ± 0.046 | No effect: the generator never puts a weekend and a period-end signal on the same anomaly, so few fall on two calendar signals at once. It matters where calendar tests pile up |
-| No amount multiplier | 0.772 ± 0.056 | Lifting large entries is worth about 7 points |
-| No Benford diversity scaling | 0.838 ± 0.045 | No effect: almost every synthetic amount is distinct, so the factor is already 1. It matters in ledgers of repeated fixed amounts |
+| Full risk score | 0.846 ± 0.043 | |
+| Rarity only (all priors = 1) | 0.828 ± 0.038 | The illustrative priors add about 2 points, within one standard deviation: the synthetic data has no history for them to encode. Their job on real ledgers is to carry what past engagements showed |
+| Priors only (no rarity) | 0.781 ± 0.039 | Per-ledger rarity is worth about 6.5 points |
+| Date tests not collapsed | 0.847 ± 0.044 | No effect: the generator never puts a weekend and a period-end signal on the same anomaly, so few fall on two calendar signals at once. It matters where calendar tests pile up |
+| No amount multiplier | 0.776 ± 0.057 | Lifting large entries is worth about 7 points |
+| No Benford diversity scaling | 0.846 ± 0.043 | No effect: almost every synthetic amount is distinct, so the factor is already 1. It matters in ledgers of repeated fixed amounts |
 
 ### Sweeps
 
@@ -180,16 +183,16 @@ ceilings can be compared. The size sweep keeps about 1.2 anomalies per list plac
 
 | Ledger | k | Risk score: precision@k (share of ceiling) | Tests hit: precision@k (share of ceiling) |
 |---|---|---|---|
-| 2,000 lines, 31 anomalies | 26 | 0.881 ± 0.048 (0.881) | 0.653 ± 0.085 (0.653) |
-| 20,000 lines, 100 anomalies | 82 | 0.838 ± 0.045 (0.838) | 0.647 ± 0.056 (0.647) |
-| 200,000 lines, 180 anomalies (10 seeds) | 150 | 0.737 ± 0.029 (0.737) | 0.423 ± 0.042 (0.423) |
-| 20,000 lines, 0.1% (20 anomalies) | 82 | 0.184 ± 0.019 (0.829) | 0.125 ± 0.028 (0.565) |
-| 20,000 lines, 0.2% (40 anomalies) | 82 | 0.374 ± 0.028 (0.848) | 0.262 ± 0.034 (0.593) |
-| 20,000 lines, 1.0% (200 anomalies, saturated) | 82 | 0.998 ± 0.005 (0.998) | 0.890 ± 0.037 (0.890) |
+| 2,000 lines, 31 anomalies | 26 | 0.886 ± 0.050 (0.886) | 0.654 ± 0.087 (0.654) |
+| 20,000 lines, 100 anomalies | 82 | 0.846 ± 0.043 (0.846) | 0.646 ± 0.056 (0.646) |
+| 200,000 lines, 180 anomalies (10 seeds) | 150 | 0.767 ± 0.023 (0.767) | 0.427 ± 0.042 (0.427) |
+| 20,000 lines, 0.1% (20 anomalies) | 82 | 0.186 ± 0.019 (0.838) | 0.125 ± 0.028 (0.565) |
+| 20,000 lines, 0.2% (40 anomalies) | 82 | 0.374 ± 0.029 (0.848) | 0.261 ± 0.035 (0.592) |
+| 20,000 lines, 1.0% (200 anomalies, saturated) | 82 | 0.998 ± 0.005 (0.998) | 0.892 ± 0.035 (0.892) |
 
 The bigger the ledger, the harder the ranking gets, and the risk score stays well ahead of
-counting tests: 23 points of share of ceiling at 2,000 lines, 31 at 200,000. When anomalies are
-scarce it reaches about 0.83 to 0.85 of the ceiling, down from about 0.9 in 0.2.0, probably because
+counting tests: 23 points of share of ceiling at 2,000 lines, 34 at 200,000. When anomalies are
+scarce it reaches about 0.84 to 0.85 of the ceiling, down from about 0.9 in 0.2.0, probably because
 the broad new tests give more ordinary lines a few modest weights that compete for the list. The 1%
 row is saturated (more anomalies than list places), so it says little about the ranking.
 
@@ -204,11 +207,11 @@ descriptions), as printed by `scripts/make_fixtures.py`:
 
 | Sr No | Description | Amount | Score | Score Breakdown |
 |---|---|---|---|---|
-| 11923 | Consultancy fee (related party) | 70,000 | 56.9 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Rounded Amount 3.8 + Keyword Match 3.6 + Manual Entry 0.8, × amount 2.47 |
+| 11923 | Consultancy fee (related party) | 70,000 | 57.0 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Rounded Amount 3.8 + Keyword Match 3.6 + Manual Entry 0.8, × amount 2.48 |
 | 7920 | Customer receipt | 110,000 | 51.9 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Rounded Amount 3.8 + Manual Entry 0.8, × amount 2.67 |
 | 12790 | Consultancy fee (related party) | 47,563 | 48.7 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Keyword Match 3.6 + date (Saturday) 1.4 + Manual Entry 0.8 + Benford 0.5, × amount 2.31 |
-| 14799 | Sales invoice | 29,999 | 42.2 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Ending 99/999 4.0 + date (Period End) 1.1, × amount 2.12 |
-| 15622 | 104522 | 100,000 | 42.1 | Same User Created and Approved 7.5 + Rounded Amount 3.8 + No or Vague Narration 2.5 + date (Saturday) 1.4 + Manual Entry 0.8, × amount 2.62 |
+| 14799 | Sales invoice | 29,999 | 43.1 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Ending 99/999 4.4 + date (Period End) 1.1, × amount 2.13 |
+| 15622 | 104522 | 100,000 | 42.1 | Same User Created and Approved 7.5 + Rounded Amount 3.8 + No or Vague Narration 2.5 + date (Saturday) 1.4 + Manual Entry 0.8, × amount 2.63 |
 
 In the working paper the same lines carry a plain sentence, for example 14799: "Posted near a
 quarter end; an amount ending in 99 or 999; created and approved by the same user ID; posted to an
@@ -223,6 +226,7 @@ account with 3 entries or fewer; a large amount (12 times the median)."
   audit findings"), source, parameters, population, whether the list is complete or a top-k cut,
   the tests that couldn't run, the date run, and blank preparer and reviewer.
 - **Lines**: every listed line, with a plain "why selected" sentence next to the score breakdown,
+  the period-end window, narration issue and matched keywords in their own columns to filter on,
   and blank columns for the audit team: Selected, Planned risk, Work done, Evidence ref, Tested by
   / date, Auditor's conclusion.
 - **Method**: the weights, marked "Internal to the audit team: not for the client". Selection
@@ -250,7 +254,7 @@ python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\a
 pip install -e ".[dev,ml]"                             # [ml] adds scikit-learn for the Isolation Forest
 pytest
 jupyter notebook notebooks/demo.ipynb
-python scripts/run_benchmark.py                        # about 30 minutes; --quick for a smoke test
+python scripts/run_benchmark.py                        # about 5 to 30 minutes; --quick for a smoke test
 ```
 
 ```python

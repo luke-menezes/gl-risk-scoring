@@ -71,8 +71,8 @@ def make_ledger(
     outside the period-end windows, from the system, with an ordinary
     description and a different approver. No test is built to find them, so
     they set a recall ceiling below 1, as on real ledgers. Like any normal
-    line, a silent anomaly can still trip a test by chance (Benford's first
-    digit, or a weekday that is a public holiday).
+    line, a silent anomaly can still trip a test by chance: Benford's first
+    digit. Being system lines, they can't trip the manual-only tests.
 
     Args:
         n_rows: Number of ledger lines before duplicates are added.

@@ -16,12 +16,13 @@ ruff check .
 - Tests take the ledger and return the flagged rows with every column kept, so the row ID
   survives. They never read the `Anomaly` column.
 - New tests go in `rules.py` and `pipeline.run_python_tests`. If a test belongs to a correlated
-  group (like the date tests), add its keyword to `scoring.DATE_KEYWORDS`.
+  group (like the date tests), add its keyword to `scoring.DATE_KEYWORDS`; otherwise give it a
+  key in `scoring.DEFAULT_PRIORS` that its name contains (a test checks this).
 - If you change the generator or the IDEA mock, rebuild the fixtures with
   `python scripts/make_fixtures.py` and re-run `notebooks/demo.ipynb`.
-- If you change the tests or the scoring, re-run `python scripts/run_benchmark.py` (about 30
-  minutes; CI only runs a small version) and update the README's tables from
-  `docs/benchmark_results.md`.
+- If you change the tests or the scoring, re-run `python scripts/run_benchmark.py` (about 5 to
+  30 minutes, depending on the machine; CI only runs a small version) and update the README's
+  tables from `docs/benchmark_results.md`.
 - Synthetic data only: no real ledgers, names or figures in issues, fixtures or examples.
 - Word outputs as facts ("created and approved by the same user ID"), never as conclusions
   ("violation", "fraudulent", "no issues found"). Selecting and concluding are the auditor's job.

@@ -21,24 +21,26 @@ from .flags import FlagLog, log_flags
 def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: str = "Date",
                      text_cols: Sequence[str] = ("Description",), id_col: str = "Sr No",
                      weekend_days: Sequence[str] = rules.WEEKEND_DAYS, source_col: str = "Source",
-                     manual_only: bool = True, fy_end_month: int = 12) -> FlagLog:
+                     manual_only: bool = True, fy_end_month: int = 12, holiday_country: str = "AE") -> FlagLog:
     """
     Run the Python tests and return ``{test name: flagged IDs}``.
 
     When the ledger has ``source_col``, the manual-entry test runs, and with ``manual_only`` (the
     default) the weekend, public holiday and round-amount tests count manual lines only: system
     postings on a Saturday are routine. Without the column the manual-entry test doesn't run (see
-    ``tests_not_run``) and those three tests use every line.
+    ``tests_not_run``) and those three tests use every line. Without the text columns, the keyword
+    and narration tests don't run either.
     """
     manual = rules.manual_entries(ledger, source_col) if source_col in ledger.columns else None
     scope = manual if manual is not None and manual_only else ledger
+    text = [c for c in text_cols if c in ledger.columns]
     results = {
-        "Keyword Match": rules.keywords(ledger, text_cols),
+        **({"Keyword Match": rules.keywords(ledger, text)} if text else {}),
         "Rounded Amount": rules.rounded_amounts(scope, amount_cols),
         "Ending 99/999": rules.ending_99(ledger, amount_cols),
-        "No or Vague Narration": rules.narration(ledger, text_cols[0]),
+        **({"No or Vague Narration": rules.narration(ledger, text_cols[0])} if text_cols[0] in text else {}),
         "Period End": rules.period_end(ledger, date_col, amount_cols, fy_end_month, weekend_days=weekend_days),
-        "Public Holiday": rules.public_holidays(scope, date_col, amount_cols),
+        "Public Holiday": rules.public_holidays(scope, date_col, amount_cols, holiday_country),
         **{day: rules.day_of_week(scope, date_col, amount_cols, day) for day in weekend_days},
         **({"Manual Entry": manual} if manual is not None else {}),
     }
@@ -49,14 +51,18 @@ def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col:
 
 
 def tests_not_run(ledger: pd.DataFrame, source_col: str = "Source", creator_col: str = "Created By",
-                  approver_col: str = "Approved By") -> list[str]:
+                  approver_col: str = "Approved By", text_cols: Sequence[str] = ("Description",)) -> list[str]:
     """
     A statement for each test the ledger lacks a column for, e.g. "Manual entries not tested: no
     Source column." Saying so matters: silence would read as "tested, nothing found".
     """
-    needs = {"Manual entries": [source_col], "Created and approved by the same user": [creator_col, approver_col]}
-    return [f"{test} not tested: no {' or '.join(missing)} column."
-            for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
+    needs = {"Manual entries": [source_col], "Created and approved by the same user": [creator_col, approver_col],
+             "No or vague narration": [text_cols[0]]}
+    out = [f"{test} not tested: no {' or '.join(missing)} column."
+           for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
+    if not any(c in ledger.columns for c in text_cols):   # the keyword test needs any one of them
+        out.append(f"Keyword match not tested: no {' or '.join(text_cols)} column.")
+    return out
 
 
 def _idea_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,7 +80,7 @@ def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_
     approver column). The ground-truth column is dropped first.
     """
     data = ledger.drop(columns=["Anomaly"], errors="ignore")
-    key_cols = list(key_cols or ["Date", account_col, "Description", *amount_cols])
+    key_cols = [c for c in key_cols or ["Date", account_col, "Description", *amount_cols] if c in data.columns]
     outputs: dict[str, pd.DataFrame] = {}
     hits = benford.benford_entries(data, amount_cols)
     for digit in hits.attrs["digits"]:

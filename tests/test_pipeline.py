@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import openpyxl
 import pandas as pd
 import pytest
 
@@ -31,13 +32,11 @@ def test_silent_anomalies_carry_no_signal(ledger):
     silent = ledger[ledger["Anomaly"] == "silent"]
     assert len(silent) == 2          # 10% of 25, rounded
     amt = synthetic.amount_columns(ledger)
-    # Public holidays aren't checked: a silent anomaly may land on one by chance
-    for result in (rules.rounded_amounts(ledger, amt), rules.ending_99(ledger, amt),
-                   rules.keywords(ledger, ["Description"]), rules.seldom_accounts(ledger, "Account"),
-                   rules.segregation_of_duties(ledger, "Created By", "Approved By"),
-                   rules.period_end(ledger, "Date", amt), rules.manual_entries(ledger),
-                   rules.narration(ledger, "Description")):
-        assert not set(silent["Sr No"]) & set(result["Sr No"])
+    # Silent anomalies are system lines, so the manual-only tests (weekend, holiday, round) can't
+    # reach them; only Benford's first digit can hit one by chance
+    log = {**pipeline.run_python_tests(ledger, amt, manual_only=True), **pipeline.idea_side_flags(ledger, amt)}
+    silent_ids = flags.id_set(silent["Sr No"])
+    assert {test for test, ids in log.items() if ids & silent_ids} <= {"Benford"}
     assert (pd.to_datetime(silent["Date"]).dt.dayofweek < 5).all()
     assert (synthetic.make_ledger(5_000, seed=1, silent_share=0)["Anomaly"] == "silent").sum() == 0
 
@@ -65,6 +64,10 @@ def test_amount_rules():
     df = small()
     assert rules.rounded_amounts(df, ["Amount"])["Sr No"].tolist() == [1, 5]
     assert rules.ending_99(df, ["Amount"])["Sr No"].tolist() == [2]
+    # Amounts with cents never end in 99, however large; float noise from imports doesn't matter
+    amounts = pd.DataFrame({"Sr No": range(5), "Amount": [35_599.30, 199.50, 1_999.00, 250_999.00, 29_999.999999]})
+    assert rules.ending_99(amounts, ["Amount"])["Sr No"].tolist() == [2, 3]
+    assert rules.rounded_amounts(amounts, ["Amount"])["Sr No"].tolist() == [4]
 
 
 def test_date_rules():
@@ -100,6 +103,19 @@ def test_manual_entries_and_manual_only_tests():
     assert "Manual Entry" not in pipeline.run_python_tests(no_source, ["Amount"])
     assert pipeline.tests_not_run(no_source) == ["Manual entries not tested: no Source column."]
     assert pipeline.tests_not_run(df) == []
+
+
+def test_no_description_column():
+    ledger = synthetic.make_ledger(1_000, seed=0).drop(columns="Description")
+    amt = synthetic.amount_columns(ledger)
+    log = pipeline.run_python_tests(ledger, amt)
+    assert "Keyword Match" not in log and "No or Vague Narration" not in log and "Rounded Amount" in log
+    assert pipeline.tests_not_run(ledger) == ["No or vague narration not tested: no Description column.",
+                                              "Keyword match not tested: no Description column."]
+    assert "Duplicate" in pipeline.idea_side_flags(ledger, amt)
+    pytest.importorskip("sklearn")
+    from glrisk.ml_baseline import line_features
+    assert (line_features(ledger, amt)[["keyword", "narration"]] == 0).all().all()
 
 
 def test_narration():
@@ -186,6 +202,26 @@ def test_fixtures_load_and_scoring_beats_baselines():
     assert precision["Ceiling (flagged lines)"] >= precision["Risk score"]
     # The in-memory IDEA side matches the committed exports
     assert pipeline.idea_side_flags(ledger, amt) == idea
+
+
+def test_every_test_has_a_prior():
+    # A test whose name matches no prior key silently gets 1.0 (how the same-user prior went unused)
+    ledger = synthetic.make_ledger(20_000, seed=0)
+    amt = synthetic.amount_columns(ledger)
+    names = [*pipeline.run_python_tests(ledger, amt), *pipeline.idea_side_flags(ledger, amt)]
+    keys = [k for k in scoring.DEFAULT_PRIORS if k != "date"]
+    for name in names:
+        assert any(k in name.lower() for k in keys + list(scoring.DATE_KEYWORDS)), f"No prior key for {name!r}"
+
+
+def test_readme_top_5_matches_the_code():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    table = readme.split("### Why each line is on the list")[1].split("\n\n")[2]
+    listed = [int(row.split("|")[1]) for row in table.splitlines()[2:]]
+    ledger = synthetic.make_ledger(20_000, seed=0)
+    amt = synthetic.amount_columns(ledger)
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), flags.load_idea_flags(FIXTURES))
+    assert listed == scoring.score_flags(flagged, amt).head(5)["Sr No"].tolist()
 
 
 def test_score_breakdown_adds_up():
@@ -276,3 +312,12 @@ def test_working_paper(tmp_path):
     assert len(lines) == 20 and "Anomaly" not in lines and lines.columns[-6:].tolist() == export.TESTING_COLUMNS
     assert lines["Why Selected"].str.endswith(".").all() and lines[export.TESTING_COLUMNS].isna().all().all()
     assert sheets["Method"].iloc[0, 0] == export.METHOD_LABEL
+    # The facts the tests found, in their own columns, and the run's parameters on the cover
+    keyword_lines = lines["Matched Keywords"].notna()
+    assert keyword_lines.any() and lines.loc[keyword_lines, "Why Selected"].str.contains("keyword list").all()
+    assert {"Period-End Window", "Narration Issue"} <= set(lines.columns)
+    assert cover["Parameter: Public holidays"].startswith("AE calendar") and "Parameter: Large amount" in cover
+    assert (lines["Manual"] == "Yes").sum() == priority["Source"].str.casefold().eq("manual").sum()
+    # Filterable, frozen header, dates without a time
+    sheet = openpyxl.load_workbook(path)["Lines"]
+    assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref and sheet["B2"].number_format == "yyyy-mm-dd"
