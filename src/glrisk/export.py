@@ -67,7 +67,9 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
                         fy_end_month: int = 12, weekend_days: Sequence[str] = rules.WEEKEND_DAYS,
                         holiday_country: str = "AE", text_cols: Sequence[str] = ("Description",),
                         source_col: str = "Source", manual_values: Iterable[str] = ("Manual",),
-                        seldom_max_entries: int = 3, drop_cols: Sequence[str] = ("Anomaly",)) -> Path:
+                        seldom_max_entries: int = 3, keywords: Iterable[str] = rules.DEFAULT_KEYWORDS,
+                        generic_words: Iterable[str] = rules.GENERIC_WORDS,
+                        drop_cols: Sequence[str] = ("Anomaly",)) -> Path:
     """
     Write ``scoring.score_flags`` output to ``path`` (xlsx) as Cover, Lines and Method sheets.
 
@@ -90,9 +92,9 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
             {True: "Yes", False: "No"}))
     # The facts each test found, in their own columns so the audit team can filter on them
     details = {"Period-End Window": windows,
-               "Narration Issue": rules.narration(priority, text_cols[0], max_blank_share=1)["Narration Issue"]
-               if text_cols[0] in text else None,
-               "Matched Keywords": rules.keywords(priority, text)["Matched Keywords"] if text else None}
+               "Narration Issue": rules.narration(priority, text_cols[0], generic_words,
+                                                  max_blank_share=1)["Narration Issue"] if text_cols[0] in text else None,
+               "Matched Keywords": rules.keywords(priority, text, keywords)["Matched Keywords"] if text else None}
     for name, values in details.items():
         if values is not None:
             lines.insert(lines.columns.get_loc("Score Breakdown"), name, values.reindex(priority.index, fill_value=""))
@@ -118,6 +120,7 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
                  **({"Manual entries": f"{source_col} is {' or '.join(manual_values)} (case ignored)"}
                     if source_col in priority else {}),
                  "Seldom-used account": f"{seldom_max_entries} entries or fewer",
+                 "Keywords": ", ".join(keywords), "Generic narration words": ", ".join(generic_words),
                  "Large amount": f"{LARGE_MULTIPLE} times the median non-zero amount, used in \"why selected\" only "
                                  "when performance materiality isn't set (practical judgement)",
                  **(parameters or {})}.items()],

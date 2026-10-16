@@ -21,7 +21,9 @@ from .flags import FlagLog, log_flags
 def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: str = "Date",
                      text_cols: Sequence[str] = ("Description",), id_col: str = "Sr No",
                      weekend_days: Sequence[str] = rules.WEEKEND_DAYS, source_col: str = "Source",
-                     manual_only: bool = True, fy_end_month: int = 12, holiday_country: str = "AE") -> FlagLog:
+                     manual_only: bool = True, fy_end_month: int = 12, holiday_country: str = "AE",
+                     keywords: Sequence[str] = rules.DEFAULT_KEYWORDS,
+                     generic_words: Sequence[str] = rules.GENERIC_WORDS, round_multiple: float = 10_000) -> FlagLog:
     """
     Run the Python tests and return ``{test name: flagged IDs}``.
 
@@ -35,10 +37,10 @@ def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col:
     scope = manual if manual is not None and manual_only else ledger
     text = [c for c in text_cols if c in ledger.columns]
     results = {
-        **({"Keyword Match": rules.keywords(ledger, text)} if text else {}),
-        "Rounded Amount": rules.rounded_amounts(scope, amount_cols),
+        **({"Keyword Match": rules.keywords(ledger, text, keywords)} if text else {}),
+        "Rounded Amount": rules.rounded_amounts(scope, amount_cols, round_multiple),
         "Ending 99/999": rules.ending_99(ledger, amount_cols),
-        **({"No or Vague Narration": rules.narration(ledger, text_cols[0])} if text_cols[0] in text else {}),
+        **({"No or Vague Narration": rules.narration(ledger, text_cols[0], generic_words)} if text_cols[0] in text else {}),
         "Period End": rules.period_end(ledger, date_col, amount_cols, fy_end_month, weekend_days=weekend_days),
         "Public Holiday": rules.public_holidays(scope, date_col, amount_cols, holiday_country),
         **{day: rules.day_of_week(scope, date_col, amount_cols, day) for day in weekend_days},

@@ -146,6 +146,7 @@ def test_text_and_user_rules():
     hits = rules.keywords(df, ["Description"])
     assert hits["Sr No"].tolist() == [2, 6]          # "Adjusted" isn't the whole word "adjust"
     assert hits["Matched Keywords"].iloc[0] == "director, write off"
+    assert pipeline.run_python_tests(df, ["Amount"], keywords=("rent",))["Keyword Match"] == {"1", "5"}
     assert rules.duplicates(df, ["Date", "Account", "Amount"])["Sr No"].tolist() == [1, 5]
     assert rules.seldom_accounts(df, "Account")["Sr No"].tolist() == [3]
     assert rules.segregation_of_duties(df, "Created By", "Approved By")["Sr No"].tolist() == [2, 3]
