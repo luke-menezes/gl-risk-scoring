@@ -10,6 +10,7 @@ threshold, window and word list here is practical judgement, and a parameter.
 from __future__ import annotations
 
 import re
+import warnings
 from collections.abc import Iterable, Sequence
 
 import holidays
@@ -32,6 +33,23 @@ def absolute_amount(df: pd.DataFrame, amount_cols: Sequence[str]) -> pd.Series:
     return df[list(amount_cols)].apply(pd.to_numeric, errors="coerce").abs().max(axis=1).fillna(0)
 
 
+def parse_dates(values: pd.Series, dayfirst: bool = True) -> pd.Series:
+    """
+    Dates from a column that may mix formats; unreadable values become NaT.
+
+    ISO dates (2025-03-08) are read first: read day first, they would become 3 August. pandas
+    guesses one format from the first remaining value and blanks the values in any other format, so
+    those are tried again one by one. ``dayfirst`` reads 02/03/2025 as 2 March.
+    """
+    dates = pd.to_datetime(values, errors="coerce", format="ISO8601")
+    for fmt in (None, "mixed"):   # the format pandas infers, then value by value
+        if (retry := dates.isna() & values.notna()).any():
+            with warnings.catch_warnings():   # "could not infer format": the next pass handles it
+                warnings.filterwarnings("ignore", "Could not infer format")
+                dates[retry] = pd.to_datetime(values[retry], errors="coerce", format=fmt, dayfirst=dayfirst)
+    return dates
+
+
 def rounded_amounts(df: pd.DataFrame, amount_cols: Sequence[str], multiple: float = 10_000) -> pd.DataFrame:
     """Lines whose amount is a non-zero multiple of ``multiple`` (10,000 = four trailing zeros)."""
     # Rounded to cents first, so float noise from imports (29,999.999999) can't change the result
@@ -51,14 +69,14 @@ def day_of_week(df: pd.DataFrame, date_col: str, amount_cols: Sequence[str], day
     """Non-zero lines posted on one day of the week, e.g. ``"Saturday"``."""
     if day.capitalize() not in DAYS:
         raise ValueError(f"Not a day of the week: {day!r}")
-    dates = pd.to_datetime(df[date_col], errors="coerce")
+    dates = parse_dates(df[date_col])
     return df[(dates.dt.day_name() == day.capitalize()) & (absolute_amount(df, amount_cols) > 0)]
 
 
 def public_holidays(df: pd.DataFrame, date_col: str, amount_cols: Sequence[str],
                     country: str = "AE") -> pd.DataFrame:
     """Non-zero lines posted on a public holiday (``holidays`` package), with the holiday's name."""
-    dates = pd.to_datetime(df[date_col], errors="coerce")
+    dates = parse_dates(df[date_col])
     years = sorted(dates.dt.year.dropna().astype(int).unique())
     calendar = holidays.country_holidays(country, years=years)
     names = dates.dt.date.map(calendar.get)
@@ -79,7 +97,7 @@ def period_end_labels(dates: pd.Series, fy_end_month: int = 12, quarter_days: tu
     ("Opening cut-off"), counted with the same ``weekend_days`` as the weekend test, so a weekend
     inside the window doesn't shorten it.
     """
-    dates = pd.to_datetime(dates, errors="coerce").dt.normalize()
+    dates = parse_dates(dates).dt.normalize()
     workday = pd.offsets.CustomBusinessDay(weekmask=" ".join(d[:3] for d in DAYS if d not in weekend_days))
     labels: dict[pd.Timestamp, str] = {}
     years = dates.dt.year.dropna().astype(int)

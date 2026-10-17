@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+One settings object for a run, and dates in mixed formats. The benchmark figures don't change.
+
+- **Dates in mixed formats**: pandas guessed one format from the first date and blanked every date
+  in another format (in `13/01/2025, 2025-01-31` the second was lost). Those lines were stated on
+  the cover as unreadable but skipped by the date tests. `rules.parse_dates` now reads ISO dates
+  first, then the inferred format, then the rest one by one; ambiguous dates are read day first by
+  default (02/03/2025 is 2 March), stated on the cover.
+- **Settings reach the tests**: a custom `manual_values` went on the cover but the manual-entry test
+  always used "Manual", and the IDEA stand-in always used a seldom threshold of 3 whatever the cover
+  said. The defaults agreed, so the sample was right.
+- **`RunSettings`** (breaking): the columns, calendar, period-end windows, thresholds and word lists
+  are fields of one frozen dataclass, passed to `run_python_tests`, `tests_not_run`, the IDEA
+  stand-in and `write_working_paper`, which states it on the cover. It replaces their separate
+  keyword arguments, so the cover can't state a value the tests didn't use.
+- **Docs**: README settings note and usage example, DESIGN note on dates.
+
 ## 0.4.0
 
 Robustness checks for the benchmark, answering "is it just the generator agreeing with itself?".

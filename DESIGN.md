@@ -62,7 +62,16 @@ For a line flagged by tests T:
   lines are blank, the column isn't being used to explain entries: that is reported, and blank
   lines aren't flagged, unless the test is run on manual lines only.
 
-Every threshold, window and word list is practical judgement, and a parameter.
+Every threshold, window and word list is practical judgement, and a field of `RunSettings`. One
+settings object goes to the tests and to the working paper, which prints it on the cover, so the
+cover can't state a value the tests didn't use.
+
+**Dates.** Ledger extracts often mix date formats. pandas guesses one format from the first value and
+silently blanks values in any other format, so `rules.parse_dates` reads ISO dates first, then the
+format pandas infers, then any remaining values one by one. Ambiguous dates are read day first by
+default (02/03/2025 is 2 March, as in the UAE); `dayfirst=False` reads them month first. ISO dates
+are read before the day-first pass because that pass would turn 2025-03-08 into 3 August. Values
+that still can't be read are counted on the cover and skipped by the date tests.
 
 ## Population first
 
