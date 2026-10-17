@@ -140,6 +140,16 @@ every ranking looks perfect; a small one has too few to fill the list.
   deviation, and the date collapse and the Benford scaling make no difference. That is reported as
   it is: the generator has no history for priors to encode, rarely puts anomalies on two calendar
   signals at once, and produces almost no repeated amounts.
+- **Robustness to the generator**, because the anomalies come from the generator the score was
+  designed around. The stress sweep draws the generator's own settings at random for each seed
+  (anomaly rate, share of silent anomalies, share of manual lines, and a `noise_scale` that
+  multiplies every kind of background false positive) and compares the risk score with counting
+  tests in share of ceiling, since the anomaly rate, and so the ceiling, changes from seed to seed.
+  The ranges are practical judgement.
+- **Prior sensitivity**, because the priors are illustrative. Every prior is multiplied by a random
+  factor between 0.5 and 1.5, twenty times per seed, and the benchmark reports how precision moves
+  and how much of the default list survives. A ranking that only worked with the exact values
+  chosen would be fragile; one that barely moves shows the result doesn't rest on them.
 - **Isolation Forest is unsupervised** and fitted with default settings on the ledger itself.
   Tuning it on the injected labels would turn it into a supervised model and an unfair comparison.
 

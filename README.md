@@ -200,9 +200,35 @@ scarce it reaches about 0.84 to 0.85 of the ceiling, down from about 0.9 in 0.2.
 the broad new tests give more ordinary lines a few modest weights that compete for the list. The 1%
 row is saturated (more anomalies than list places), so it says little about the ranking.
 
-**Caveat.** The anomalies come from the same generator the scoring was designed around, so this
-shows the method does what it was designed to do, and which parts matter. It isn't evidence about
-real ledgers, where the irregular entries are unknown.
+### Is it just the generator agreeing with itself?
+
+The anomalies come from the same generator the scoring was designed around, so two checks test how
+much the result depends on the generator's settings and on the illustrative priors.
+
+**Generator settings drawn at random.** For each of 30 ledgers the anomaly rate (0.2% to 1%), the
+share of silent anomalies (5% to 25%), the share of manual lines (5% to 30%) and the amount of
+background noise (half to double every kind of false positive) are drawn at random. Results are in
+share of ceiling, because the anomaly rate, and so the best possible precision, changes between
+ledgers.
+
+| Ranking | Share of ceiling at k = 82 |
+|---|---|
+| Risk score | 0.871 ± 0.080 (lowest 0.737) |
+| Number of tests hit | 0.663 ± 0.124 (lowest 0.488) |
+
+The risk score is ahead on all 30 ledgers, by 21 points on average and 7 at the least.
+
+**Priors perturbed at random.** Each prior is multiplied by a random factor between 0.5 and 1.5,
+20 times on each of the 30 ledgers. Precision@82 averages 0.819 ± 0.051 (0.846 with the
+illustrative values; lowest draw 0.671), and on average 90% of the default list stays on it
+(lowest 70%). Random priors do about as well as setting every prior to 1 (0.828 in the ablation):
+the result rests on per-ledger rarity and the amount multiplier, not on the exact prior values.
+
+**Caveat.** These checks vary the generator's settings, not its design: every anomaly is still one
+the tests were built to look for, or a silent one. So the benchmark shows the method does what it
+was designed to do, which parts matter, and that it doesn't hinge on hand-picked numbers. It isn't
+evidence about real ledgers, where the irregular entries are unknown. The full tables are in
+[`docs/benchmark_results.md`](docs/benchmark_results.md).
 
 ### Why each line is on the list
 

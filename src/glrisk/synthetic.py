@@ -51,6 +51,7 @@ def make_ledger(
     noise: bool = True,
     silent_share: float = 0.10,
     manual_share: float = 0.15,
+    noise_scale: float = 1.0,
 ) -> pd.DataFrame:
     """
     Build a synthetic ledger, one row per journal line.
@@ -84,6 +85,7 @@ def make_ledger(
         noise: Add the background false positives described above.
         silent_share: Share of the injected anomalies that carry no signal.
         manual_share: Share of normal lines entered by hand.
+        noise_scale: Multiplies every kind of background false positive (1 = the default amounts).
 
     Returns:
         The ledger with ``Sr No`` (the row ID), ``Date``, ``Account``,
@@ -98,7 +100,7 @@ def make_ledger(
     # Dates: weekdays mostly, weekends rare (about 1.5% of lines with noise on)
     days = pd.date_range(start, end, freq="D")
     window = period_end_labels(pd.Series(days)).to_numpy()
-    weights = np.where(days.dayofweek < 5, 1.0, 0.04 if noise else 0.0)
+    weights = np.where(days.dayofweek < 5, 1.0, 0.04 * noise_scale if noise else 0.0)
     dates = rng.choice(days, size=n_rows, p=weights / weights.sum())
 
     amounts = np.round(rng.lognormal(mean=7.5, sigma=1.3, size=n_rows), 2)
@@ -116,21 +118,21 @@ def make_ledger(
     })
     if noise:
         # Round amounts in normal business (e.g. rent, fixed fees)
-        idx = rng.choice(n_rows, size=n_rows // 100, replace=False)
+        idx = rng.choice(n_rows, size=int(n_rows // 100 * noise_scale), replace=False)
         df.loc[idx, "_amount"] = rng.choice([10_000, 20_000, 50_000], size=len(idx))
         # A supplier on fixed prices (4,000-4,999): ordinary business that pushes the first digit 4
         # above Benford's expectation, so the Benford test has something to flag
-        idx = rng.choice(np.setdiff1d(np.arange(n_rows), idx), size=n_rows // 40, replace=False)
+        idx = rng.choice(np.setdiff1d(np.arange(n_rows), idx), size=int(n_rows // 40 * noise_scale), replace=False)
         df.loc[idx, "_amount"] = np.round(rng.uniform(4_000, 5_000, size=len(idx)), 2)
         df.loc[idx, "Description"] = "Supplier payment"
         # Routine system accruals and releases in the quarter-end windows, and system lines with no text
         quarter_days = days[(window == "Quarter end") & (days.dayofweek < 5)]
-        idx = rng.choice(n_rows, size=n_rows // 100 if len(quarter_days) else 0, replace=False)
+        idx = rng.choice(n_rows, size=int(n_rows // 100 * noise_scale) if len(quarter_days) else 0, replace=False)
         df.loc[idx, "Date"] = rng.choice(quarter_days, size=len(idx)) if len(idx) else []
         df.loc[idx, "Source"] = "System"
         df.loc[idx, "Description"] = rng.choice(["Accrual", "Prepayment release"], size=len(idx))
         system = df.index[df["Source"] == "System"]
-        df.loc[rng.choice(system, size=n_rows // 50, replace=False), "Description"] = ""
+        df.loc[rng.choice(system, size=int(n_rows // 50 * noise_scale), replace=False), "Description"] = ""
 
     # Injected anomalies: 1-4 signals each, and a larger than usual amount
     n_anomalies = max(1, int(n_rows * anomaly_rate))
@@ -184,7 +186,7 @@ def make_ledger(
     if noise:
         # Exact duplicates of normal lines (double postings that are not injected anomalies)
         normal = df.index[df["Anomaly"] == ""]
-        dupes = df.loc[rng.choice(normal, size=max(1, n_rows // 400), replace=False)]
+        dupes = df.loc[rng.choice(normal, size=max(1, int(n_rows // 400 * noise_scale)), replace=False)]
         df = pd.concat([df, dupes], ignore_index=True)
 
     if layout == "debit_credit":

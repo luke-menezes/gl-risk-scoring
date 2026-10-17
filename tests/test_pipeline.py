@@ -272,6 +272,16 @@ def test_benchmark_run_once_is_consistent():
     assert {"precision mean", "recall std", "seeds"} <= set(summary.columns)
 
 
+def test_robustness_checks():
+    round_lines = [(rules.rounded_amounts(synthetic.make_ledger(5_000, seed=1, noise_scale=s), ["Debit", "Credit"])
+                    ["Anomaly"] == "").sum() for s in (1, 2)]
+    assert round_lines[1] > round_lines[0]                          # more background noise
+    draws = evaluate.prior_sensitivity(2_000, seed=0, draws=3)
+    assert draws[["precision", "overlap"]].stack().between(0, 1).all()
+    same = evaluate.prior_sensitivity(2_000, seed=0, draws=1, spread=0)
+    assert same["overlap"].item() == 1                               # unchanged priors, unchanged list
+
+
 def test_isolation_forest_ranks_every_line():
     pytest.importorskip("sklearn")
     from glrisk.ml_baseline import isolation_forest_ranking
