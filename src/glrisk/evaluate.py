@@ -79,15 +79,16 @@ def compare_rankings(scored: pd.DataFrame, ledger: pd.DataFrame, amount_cols: Se
 
 
 def run_once(n_rows: int, anomaly_rate: float, seed: int, ks: Iterable[int] | None = None,
-             ablation: bool = False, ml: bool = False) -> pd.DataFrame:
+             ablation: bool = False, ml: bool = False, **ledger_kwargs) -> pd.DataFrame:
     """
     Generate one ledger, run every test, score it and measure each ranking at each k.
 
     The IDEA-side tests are computed in memory (``pipeline.idea_side_flags``). Returns a long
     table: ``n_rows``, ``anomaly_rate``, ``seed``, ``ranking``, ``k``, ``default_k``, ``precision``,
     ``recall`` and ``share_of_ceiling`` (precision ÷ the best possible precision at that k).
+    ``ledger_kwargs`` go to ``synthetic.make_ledger`` (e.g. ``noise_scale``).
     """
-    ledger = synthetic.make_ledger(n_rows, seed=seed, anomaly_rate=anomaly_rate)
+    ledger = synthetic.make_ledger(n_rows, seed=seed, anomaly_rate=anomaly_rate, **ledger_kwargs)
     amt = synthetic.amount_columns(ledger)
     flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt))
     truth = set(ledger.loc[ledger["Anomaly"] != "", "Sr No"])
@@ -109,6 +110,33 @@ def run_once(n_rows: int, anomaly_rate: float, seed: int, ks: Iterable[int] | No
         rows.append(("Ceiling (flagged lines)", k, *best, 1.0))
     out = pd.DataFrame(rows, columns=["ranking", "k", "precision", "recall", "share_of_ceiling"])
     return out.assign(n_rows=n_rows, anomaly_rate=anomaly_rate, seed=seed, default_k=default_k)
+
+
+def stress_settings(seed: int) -> dict[str, float]:
+    """Generator settings drawn at random per seed, for the stress sweep (ranges: practical judgement)."""
+    rng = np.random.default_rng(seed + 1_000)   # not the ledger's own seed
+    return {"anomaly_rate": round(rng.uniform(0.002, 0.01), 4), "silent_share": round(rng.uniform(0.05, 0.25), 2),
+            "manual_share": round(rng.uniform(0.05, 0.30), 2), "noise_scale": round(rng.uniform(0.5, 2.0), 2)}
+
+
+def prior_sensitivity(n_rows: int, seed: int, draws: int = 20, spread: float = 0.5) -> pd.DataFrame:
+    """
+    Re-score one ledger with every prior multiplied by a random factor in [1 - spread, 1 + spread].
+
+    One row per draw: ``precision`` at the default k, and ``overlap``, the share of the default
+    priority list still on the list. Shows whether the ranking depends on the exact prior values.
+    """
+    ledger = synthetic.make_ledger(n_rows, seed=seed)
+    amt = synthetic.amount_columns(ledger)
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt))
+    truth, k = set(ledger.loc[ledger["Anomaly"] != "", "Sr No"]), scoring.priority_list_size(len(ledger))
+    default = set(scoring.score_flags(flagged, amt, top_n=k)["Sr No"])
+    rng, rows = np.random.default_rng(seed), []
+    for draw in range(draws):
+        priors = {key: v * rng.uniform(1 - spread, 1 + spread) for key, v in scoring.DEFAULT_PRIORS.items()}
+        top = scoring.score_flags(flagged, amt, priors=priors, top_n=k)["Sr No"].tolist()
+        rows.append((seed, draw, precision_recall_at_k(top, truth, k)[0], len(default & set(top)) / k))
+    return pd.DataFrame(rows, columns=["seed", "draw", "precision", "overlap"])
 
 
 def summarise(results: pd.DataFrame, default_k_only: bool = True) -> pd.DataFrame:
