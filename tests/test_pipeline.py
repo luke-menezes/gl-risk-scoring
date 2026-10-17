@@ -22,7 +22,12 @@ def test_ledger_layouts_and_ground_truth(ledger):
     assert ledger["Sr No"].is_unique and ledger["Sr No"].min() == 1
     assert {"Debit", "Credit"} <= set(ledger.columns)
     assert ((ledger["Debit"] == 0) | (ledger["Credit"] == 0)).all()
-    assert (ledger["Anomaly"] != "").sum() == 25
+    vouchers = ledger.groupby("Voucher No")
+    assert vouchers.size().between(2, 4).all()
+    assert ((ledger["Debit"] - ledger["Credit"]).groupby(ledger["Voucher No"]).sum().abs() < 1e-6).all()   # balanced
+    shared = ["Date", "Created By", "Approved By", "Source", "Anomaly"]
+    assert (vouchers[shared].nunique() == 1).all().all()           # header fields are the voucher's
+    assert (vouchers["Anomaly"].first() != "").sum() == 15          # 0.8% of about 1,890 vouchers
     signed = synthetic.make_ledger(1_000, layout="signed", seed=1)
     assert "Amount" in signed.columns and (signed["Amount"] < 0).any()
     with pytest.raises(ValueError):
@@ -31,7 +36,7 @@ def test_ledger_layouts_and_ground_truth(ledger):
 
 def test_silent_anomalies_carry_no_signal(ledger):
     silent = ledger[ledger["Anomaly"] == "silent"]
-    assert len(silent) == 2          # 10% of 25, rounded
+    assert silent["Voucher No"].nunique() == 2          # 10% of 15, rounded
     amt = synthetic.amount_columns(ledger)
     # Silent anomalies are system lines, so the manual-only tests (weekend, holiday, round) can't
     # reach them; only Benford's first digit can hit one by chance
@@ -51,6 +56,7 @@ def test_same_seed_same_ledger():
 def small():
     return pd.DataFrame({
         "Sr No": [1, 2, 3, 4, 5, 6],
+        "Voucher No": ["V1", "V2", "V3", "V4", "V5", "V6"],     # one line each
         "Date": pd.to_datetime(["2025-03-03", "2025-03-08", "2025-03-09", "2025-12-02", "2025-03-03", "2025-03-04"]),
         "Account": ["Cash", "Cash", "Rare", "Cash", "Cash", "Cash"],
         "Description": ["Rent", "Write off per director", "Adjusted", "Fees", "Rent", "Reversal"],
@@ -170,8 +176,9 @@ def test_settings_reach_the_tests_and_the_cover(tmp_path):
     idea = pipeline.idea_side_flags(df, ["Amount"], settings)
     assert log["Manual Entry"] == {"1", "3", "6"} and idea["Seldom Account Entries"] == {str(i) for i in range(1, 7)}
     assert pipeline.idea_side_flags(df, ["Amount"])["Seldom Account Entries"] == {"3"}
-    priority = scoring.score_flags(flags.consolidate(df, log, idea), ["Amount"], top_n=None)
-    path = export.write_working_paper(priority, tmp_path / "wp.xlsx", ["Amount"], "small", settings=settings)
+    lines = flags.consolidate(df, log, idea, min_flags=0)
+    priority = scoring.score_flags(scoring.to_vouchers(lines, ["Amount"], settings), ["Voucher Amount"], top_n=None)
+    path = export.write_working_paper(priority, lines, tmp_path / "wp.xlsx", ["Amount"], "small", settings=settings)
     cover = dict(pd.read_excel(path, sheet_name="Cover").to_numpy())
     assert cover["Parameter: Manual entries"] == "Source is System (case ignored)"
     assert cover["Parameter: Seldom-used account"].startswith("5 entries or fewer (with real IDEA exports")
@@ -261,15 +268,66 @@ def test_fixtures_load_and_scoring_beats_baselines():
     idea = flags.load_idea_flags(FIXTURES)
     assert {"Benford", "Duplicate", "Seldom Account Entries", "Same User Created and Approved"} <= set(idea)
     assert "Account Summary" not in idea   # no row IDs: skipped
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), idea)
-    scored = scoring.score_flags(flagged, amt, top_n=None)
-    k = scoring.priority_list_size(len(ledger))
-    table = evaluate.compare_rankings(scored, ledger, amt, k)
+    lines = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), idea, min_flags=0)
+    vouchers = scoring.to_vouchers(lines, amt)
+    scored = scoring.score_flags(vouchers, ["Voucher Amount"], top_n=None)
+    k = scoring.priority_list_size(vouchers.attrs["n_rows"])
+    table = evaluate.compare_rankings(scored, lines, ledger, amt, k)
     precision = table[f"Precision@{k}"]
     assert precision["Risk score"] > precision["Number of tests hit"] > precision["Amount only"]
-    assert precision["Ceiling (flagged lines)"] >= precision["Risk score"]
+    assert precision["Ceiling (flagged vouchers)"] >= precision["Risk score"]
     # The in-memory IDEA side matches the committed exports
     assert pipeline.idea_side_flags(ledger, amt) == idea
+
+
+def test_voucher_scoring():
+    ledger = synthetic.make_ledger(5_000, seed=2)
+    amt = synthetic.amount_columns(ledger)
+    py, idea = pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt)
+    lines = flags.consolidate(ledger, py, idea, min_flags=0)
+    # Without a voucher column each line is its own voucher: the per-line ranking and scores, with the
+    # median over all non-zero lines
+    alone = scoring.score_flags(scoring.to_vouchers(lines, amt, RunSettings(voucher_col="Journal")), ["Voucher Amount"],
+                                top_n=None)
+    flagged = flags.consolidate(ledger, py, idea)
+    flagged.attrs["median_amount"] = alone.attrs["median_amount"]
+    per_line = scoring.score_flags(flagged, amt, top_n=None)
+    assert alone["Sr No"].tolist() == per_line["Sr No"].tolist() and alone["Score"].tolist() == per_line["Score"].tolist()
+    every_line = rules.absolute_amount(ledger, amt)
+    assert alone.attrs["median_amount"] == every_line[every_line > 0].median()
+    assert "Scored per line: no Voucher No column." in pipeline.tests_not_run(ledger.drop(columns="Voucher No"), amt)
+    # A voucher meets a test if any of its lines does; rarity counts vouchers
+    vouchers = scoring.to_vouchers(lines, amt)
+    assert vouchers.attrs["n_rows"] == ledger["Voucher No"].nunique()
+    # The median is over all vouchers, not only the flagged ones; Accounts lists the main line's first
+    all_amounts = scoring.voucher_amounts(ledger, amt, "Voucher No")
+    assert scoring.score_flags(vouchers, ["Voucher Amount"]).attrs["median_amount"] == all_amounts.median()
+    first = vouchers.iloc[0]
+    main_account = ledger.loc[ledger["Voucher No"] == first["Voucher No"], "Account"].iloc[0]
+    assert vouchers.columns[1] == "Accounts" and first["Accounts"].startswith(main_account)
+    keyword = set(ledger.loc[ledger["Sr No"].astype(str).isin(py["Keyword Match"]), "Voucher No"])
+    assert set(vouchers.loc[vouchers["Keyword Match"], "Voucher No"]) == keyword
+    assert vouchers.attrs["test_counts"]["Keyword Match"] == len(keyword)
+    # Voucher amount: the larger of total debits and credits, the same in both layouts
+    debit_credit, signed = synthetic.make_ledger(1_000, seed=1), synthetic.make_ledger(1_000, layout="signed", seed=1)
+    amounts = scoring.voucher_amounts(debit_credit, ["Debit", "Credit"], "Voucher No")
+    assert np.allclose(amounts, debit_credit.groupby("Voucher No")["Debit"].sum())
+    assert np.allclose(amounts, scoring.voucher_amounts(signed, ["Amount"], "Voucher No"))
+    with pytest.raises(ValueError, match="min_flags=0"):
+        scoring.to_vouchers(flags.consolidate(ledger, py, idea), amt)     # unflagged lines are needed
+    # Benford's diversity comes from the line amounts it tests: repeated fixed fees split over legs
+    # are hidden in varied voucher totals but not in the lines
+    # Each voucher: four fixed fees, one varying line and the credit; every voucher total differs
+    fees = pd.DataFrame({"Sr No": range(1, 241), "Voucher No": np.repeat(np.arange(40), 6),
+                         "Debit": [d for i in range(40) for d in [1000.0, 2000.0, 3000.0, 4000.0, 500.0 + i, 0.0]],
+                         "Credit": [c for i in range(40) for c in [0.0] * 5 + [10_500.0 + i]]})
+    fee_lines = flags.consolidate(fees, {"Test": {"1"}}, min_flags=0)
+    fee_vouchers = scoring.to_vouchers(fee_lines, ["Debit", "Credit"])
+    assert scoring.voucher_amounts(fees, ["Debit", "Credit"], "Voucher No").nunique() == 40   # totals all differ
+    assert fee_vouchers.attrs["amount_diversity"] < 0.5                                       # lines repeat
+    assert scoring.test_weights(fee_vouchers, amount_cols=["Voucher Amount"])[2] < 1
+    bias = evaluate.size_bias(2_000, seed=0)
+    assert set(bias["lines"]) == {2, 3, 4} and bias["listed"].sum() == scoring.priority_list_size(len(bias))
 
 
 def test_every_test_has_a_prior():
@@ -284,12 +342,13 @@ def test_every_test_has_a_prior():
 
 def test_readme_top_5_matches_the_code():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    table = readme.split("### Why each line is on the list")[1].split("\n\n")[2]
-    listed = [int(row.split("|")[1]) for row in table.splitlines()[2:]]
+    table = readme.split("### Why each voucher is on the list")[1].split("\n\n")[2]
+    listed = [row.split("|")[1].strip() for row in table.splitlines()[2:]]
     ledger = synthetic.make_ledger(20_000, seed=0)
     amt = synthetic.amount_columns(ledger)
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), flags.load_idea_flags(FIXTURES))
-    assert listed == scoring.score_flags(flagged, amt).head(5)["Sr No"].tolist()
+    lines = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), flags.load_idea_flags(FIXTURES), min_flags=0)
+    vouchers = scoring.score_flags(scoring.to_vouchers(lines, amt), ["Voucher Amount"])
+    assert listed == vouchers.head(5)["Voucher No"].tolist()
 
 
 def test_score_breakdown_adds_up():
@@ -319,11 +378,11 @@ def test_ablation_switches():
 
 
 def test_benchmark_run_once_is_consistent():
-    results = evaluate.run_once(2_000, 0.005, seed=0, ks=[10])
-    assert set(results["k"]) == {10, scoring.priority_list_size(2_000 + 5)}
+    results = evaluate.run_once(2_000, 0.008, seed=0, ks=[10])
+    assert set(results["k"]) == {10, scoring.priority_list_size(synthetic.make_ledger(2_000)["Voucher No"].nunique())}
     assert results["precision"].between(0, 1).all() and results["recall"].between(0, 1).all()
     at = results.set_index(["k", "ranking"])["recall"]
-    assert all(at[(k, "Ceiling (flagged lines)")] >= at[(k, "Risk score")] for k in results["k"].unique())
+    assert all(at[(k, "Ceiling (flagged vouchers)")] >= at[(k, "Risk score")] for k in results["k"].unique())
     summary = evaluate.summarise(results)
     assert {"precision mean", "recall std", "seeds"} <= set(summary.columns)
 
@@ -377,25 +436,37 @@ def test_performance_materiality_lines_are_always_listed():
 def test_working_paper(tmp_path):
     ledger = synthetic.make_ledger(5_000, seed=2)
     amt = synthetic.amount_columns(ledger)
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt))
-    priority = scoring.score_flags(flagged, amt, top_n=20)
-    path = export.write_working_paper(priority, tmp_path / "wp.xlsx", amt, "synthetic", {"k": 20},
+    lines = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt),
+                              min_flags=0)
+    priority = scoring.score_flags(scoring.to_vouchers(lines, amt), ["Voucher Amount"], top_n=20)
+    path = export.write_working_paper(priority, lines, tmp_path / "wp.xlsx", amt, "synthetic", {"k": 20},
                                       ["Manual entries not tested: no Source column."])
     sheets = pd.read_excel(path, sheet_name=None, header=None)
-    assert list(sheets) == ["Cover", "Lines", "Method"]
+    assert list(sheets) == ["Cover", "Vouchers", "Lines", "Method"]
     cover = dict(sheets["Cover"].iloc[1:].to_numpy())
     assert cover["Status"] == export.STATUS and cover["Extent"].startswith("Partial: the top 20 of")
     assert cover["Not tested or limited"].startswith("Manual entries not tested")
-    lines = pd.read_excel(path, sheet_name="Lines")
-    assert len(lines) == 20 and "Anomaly" not in lines and lines.columns[-6:].tolist() == export.TESTING_COLUMNS
-    assert lines["Why Selected"].str.endswith(".").all() and lines[export.TESTING_COLUMNS].isna().all().all()
+    vouchers = pd.read_excel(path, sheet_name="Vouchers")
+    assert len(vouchers) == 20 and "Anomaly" not in vouchers and vouchers.columns[-6:].tolist() == export.TESTING_COLUMNS
+    assert vouchers["Why Selected"].str.endswith(".").all() and vouchers[export.TESTING_COLUMNS].isna().all().all()
     assert sheets["Method"].iloc[0, 0] == export.METHOD_LABEL
-    # The facts the tests found, in their own columns, and the run's parameters on the cover
-    keyword_lines = lines["Matched Keywords"].notna()
-    assert keyword_lines.any() and lines.loc[keyword_lines, "Why Selected"].str.contains("keyword list").all()
-    assert {"Period-End Window", "Narration Issue"} <= set(lines.columns)
+    # Every line of the listed vouchers, flagged or not, with the facts the tests found
+    lines_sheet = pd.read_excel(path, sheet_name="Lines")
+    assert len(lines_sheet) == vouchers["Lines"].sum() and set(lines_sheet["Voucher Rank"]) == set(range(1, 21))
+    assert set(lines_sheet["Flagged Line"]) <= {"Yes", "No"}
+    keyword_lines = lines_sheet["Matched Keywords"].notna()
+    keyword_vouchers = vouchers["Voucher No"].isin(lines_sheet.loc[keyword_lines, "Voucher No"])
+    assert keyword_lines.any() and vouchers.loc[keyword_vouchers, "Why Selected"].str.contains("keyword list").all()
+    # A test that flags only some of a voucher's lines says so; one that flags them all doesn't
+    v = vouchers.set_index("Voucher No")
+    partial = lines_sheet.groupby("Voucher No")["Matched Keywords"].count().reindex(v.index) < v["Lines"]
+    noted = v["Why Selected"].str.contains(r"keyword list \(\d of \d lines\)")
+    assert (noted == (v["Why Selected"].str.contains("keyword list") & partial)).all()
+    assert noted.any()
+    assert {"Period-End Window", "Narration Issue"} <= set(lines_sheet.columns)
     assert cover["Parameter: Public holidays"].startswith("AE calendar") and "Parameter: Large amount" in cover
-    assert (lines["Manual"] == "Yes").sum() == priority["Source"].str.casefold().eq("manual").sum()
+    assert (lines_sheet["Manual"] == "Yes").sum() == lines_sheet["Source"].str.casefold().eq("manual").sum()
     # Filterable, frozen header, dates without a time
-    sheet = openpyxl.load_workbook(path)["Lines"]
-    assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref and sheet["B2"].number_format == "yyyy-mm-dd"
+    for name, cell in (("Vouchers", "D2"), ("Lines", "C2")):
+        sheet = openpyxl.load_workbook(path)[name]
+        assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref and sheet[cell].number_format == "yyyy-mm-dd"
