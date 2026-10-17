@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.1
+
+Fixes from a review of 0.5.0, for inputs the synthetic ledger never produces. The benchmark
+figures don't change.
+
+- **Dates that stopped the pipeline**: `rules.parse_dates` raised an error, instead of counting
+  lines as unreadable, on times with microseconds, on ISO dates with a time-zone offset and on
+  numbers. Every pass now writes into one date type. Time-zone offsets are dropped, keeping the
+  local date and time, so no entry moves to another day. Numbers from 20,000 to 80,000 are read as
+  Excel serial dates (a date cell that lost its format) instead of as 1970 dates. Compact dates
+  such as 20250308 still read; other numbers are unreadable. The cover's Dates row says so.
+- **Isolation Forest features** read dates with `parse_dates` (a mixed-format column raised an
+  error) and take `RunSettings`, so they use the run's columns, word lists and windows.
+- **`RunSettings` holds every column** (breaking): `account_col`, `creator_col`, `approver_col`
+  and `duplicate_key` are fields, replacing the keyword arguments of `tests_not_run`,
+  `idea_side_results`, `write_idea_exports`, `ml_baseline.line_features` and
+  `isolation_forest_ranking`. The duplicate key was defined twice and could disagree; it is now
+  defined once and stated on the cover, and "why selected" names it.
+- **Seldom threshold with real IDEA exports**: the cover and `idea/README.md` say that the test ran
+  with the macro's `SELDOM_MAX`, so `seldom_max_entries` must be kept in step with it.
+
 ## 0.5.0
 
 One settings object for a run, and dates in mixed formats. The benchmark figures don't change.

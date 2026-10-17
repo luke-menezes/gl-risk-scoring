@@ -19,9 +19,12 @@ class RunSettings:
     Columns, calendar, thresholds and word lists for one run.
 
     ``dayfirst`` reads ambiguous dates such as 02/03/2025 as 2 March (the UAE convention).
+    ``duplicate_key`` is the columns two lines must share to be duplicates, with the amount always
+    added; ``None`` means the date, account and first text column.
     ``manual_only`` limits the weekend, public holiday and round-amount tests to manual lines when
-    the ledger has ``source_col``. ``seldom_max_entries`` is the seldom-account threshold the IDEA
-    side uses. ``quarter_days`` and ``year_end_days`` set the period-end windows (see
+    the ledger has ``source_col``. ``seldom_max_entries`` is the seldom-account threshold of the IDEA
+    side: the Python stand-in uses it, but with real IDEA exports the test ran with the macro's
+    ``SELDOM_MAX``, so keep the two in step. ``quarter_days`` and ``year_end_days`` set the period-end windows (see
     ``rules.period_end_labels``).
     """
 
@@ -29,6 +32,10 @@ class RunSettings:
     text_cols: tuple[str, ...] = ("Description",)
     id_col: str = "Sr No"
     source_col: str = "Source"
+    account_col: str = "Account"
+    creator_col: str = "Created By"
+    approver_col: str = "Approved By"
+    duplicate_key: tuple[str, ...] | None = None
     dayfirst: bool = True
     weekend_days: tuple[str, ...] = rules.WEEKEND_DAYS
     holiday_country: str = "AE"
@@ -41,6 +48,11 @@ class RunSettings:
     seldom_max_entries: int = 3
     keywords: tuple[str, ...] = rules.DEFAULT_KEYWORDS
     generic_words: tuple[str, ...] = rules.GENERIC_WORDS
+
+    @property
+    def dup_key(self) -> tuple[str, ...]:
+        """The duplicate key without the amount: ``duplicate_key``, or date, account and first text column."""
+        return self.duplicate_key or (self.date_col, self.account_col, self.text_cols[0])
 
     @property
     def windows(self) -> dict:
@@ -56,14 +68,18 @@ class RunSettings:
                                   f"quarter; {self.year_end_days} working days either side of the year-end",
             "Weekend days": ", ".join(self.weekend_days),
             "Public holidays": f"{self.holiday_country} calendar (holidays package {holidays.__version__})",
-            "Dates": "ambiguous dates read day first (02/03 is 2 March)" if self.dayfirst
-                     else "ambiguous dates read month first (02/03 is 3 February)",
+            "Dates": ("ambiguous dates read day first (02/03 is 2 March)" if self.dayfirst
+                      else "ambiguous dates read month first (02/03 is 3 February)")
+                     + "; numbers from 20,000 to 80,000 read as Excel serial dates; time-zone offsets dropped, "
+                       "local time kept",
             **({"Manual entries": f"{self.source_col} is {' or '.join(self.manual_values)} (case ignored)"}
                if has_source else {}),
             "Weekend, holiday and round-amount tests": "manual lines only" if self.manual_only and has_source
                                                        else "all lines",
             "Round amount": f"multiple of {self.round_multiple:,.0f}",
-            "Seldom-used account": f"{self.seldom_max_entries} entries or fewer",
+            "Seldom-used account": f"{self.seldom_max_entries} entries or fewer (with real IDEA exports, the "
+                                   "threshold the macro was run with: keep it in step with SELDOM_MAX)",
+            "Duplicate key": ", ".join(self.dup_key) + " and the amount",
             "Keywords": ", ".join(self.keywords),
             "Generic narration words": ", ".join(self.generic_words),
         }

@@ -32,7 +32,7 @@ PHRASES = {
     "round": "a round amount",
     "99": "an amount ending in 99 or 999",
     "seldom": "posted to an account with {seldom} entries or fewer",
-    "duplicate": "same date, account, description and amount as another line",
+    "duplicate": "same {key} and amount as another line",
     "same user": "created and approved by the same user ID",
     "benford": "first digit over-represented in this ledger (Benford)",
     "manual": "a manual entry",
@@ -42,7 +42,8 @@ WINDOWS = {"Quarter end": "near a quarter end", "Year end": "near the year-end",
            "Opening cut-off": "just after the prior year-end"}
 
 
-def why_selected(row: pd.Series, attrs: dict, amount: float, window: str = "", seldom_max_entries: int = 3) -> str:
+def why_selected(row: pd.Series, attrs: dict, amount: float, window: str = "", seldom_max_entries: int = 3,
+                 key: str = "date, account, description") -> str:
     """
     A plain sentence built from per-test phrases, the date tests merged into one "posted ..." clause:
     "Posted on a Saturday and near a quarter end; a round amount; a manual entry."
@@ -51,7 +52,7 @@ def why_selected(row: pd.Series, attrs: dict, amount: float, window: str = "", s
              else "on a public holiday" if "holiday" in t.lower() else f"on a {t}"
              for t in attrs["date_tests"] if row[t]]
     parts = ["posted " + " and ".join(dates)] if dates else []
-    parts += [next((v for k, v in PHRASES.items() if k in t.lower()), t).format(seldom=seldom_max_entries)
+    parts += [next((v for k, v in PHRASES.items() if k in t.lower()), t).format(seldom=seldom_max_entries, key=key)
               for t in attrs["tests"] if row[t] and t not in attrs["date_tests"]]
     pm, median = attrs.get("performance_materiality"), attrs.get("median_amount")
     if pm is not None and amount > pm:
@@ -94,7 +95,8 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
         if values is not None:
             lines.insert(lines.columns.get_loc("Score Breakdown"), name, values.reindex(priority.index, fill_value=""))
     lines.insert(lines.columns.get_loc("Score Breakdown"), "Why Selected",
-                 [why_selected(priority.loc[i], a, amounts[i], windows[i], s.seldom_max_entries) for i in priority.index])
+                 [why_selected(priority.loc[i], a, amounts[i], windows[i], s.seldom_max_entries,
+                              ", ".join(s.dup_key).lower()) for i in priority.index])
     lines = lines.assign(**{c: "" for c in TESTING_COLUMNS})
 
     extent = (f"Complete: all {n:,} flagged lines" if k is None or k >= n
