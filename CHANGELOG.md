@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0
+
+Robustness checks for the benchmark, answering "is it just the generator agreeing with itself?".
+The existing figures don't change.
+
+- **Stress sweep**: the generator's settings (anomaly rate, silent share, manual share, background
+  noise) are drawn at random per seed. The risk score is ahead of counting tests on all 30
+  ledgers: share of ceiling 0.871 ± 0.080 against 0.663 ± 0.124, a lead of 21 points on average
+  and 7 at the least.
+- **Prior sensitivity**: every prior multiplied by a random factor in 0.5-1.5, 20 times per
+  ledger. Precision@82 averages 0.819 ± 0.051 (0.846 with the illustrative priors), and 90% of
+  the default list stays on it on average. The result rests on rarity and the amount multiplier,
+  not on the exact prior values.
+- **Generator**: `make_ledger(noise_scale=...)` scales every kind of background false positive;
+  the default leaves existing ledgers unchanged.
+- **Docs**: README "Is it just the generator agreeing with itself?", DESIGN evaluation notes.
+
 ## 0.3.2
 
 Smaller fixes from a review of 0.3.1, and maintenance. The benchmark figures don't change.

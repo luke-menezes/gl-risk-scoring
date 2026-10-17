@@ -56,3 +56,21 @@ Python 3.11.5; numpy 2.4.6, pandas 3.0.6, holidays 0.106, scikit-learn 1.9.1.
 | 20,000 | 1.00% | Risk score | 0.998 ± 0.005 | 0.409 ± 0.002 | 0.998 ± 0.005 | 30 |
 | 20,000 | 1.00% | Number of tests hit | 0.892 ± 0.035 | 0.366 ± 0.014 | 0.892 ± 0.035 | 30 |
 | 20,000 | 1.00% | Ceiling (flagged lines) | 1.000 ± 0.000 | 0.906 ± 0.005 | 1.000 ± 0.000 | 30 |
+
+## Robustness to the generator (settings drawn at random per seed)
+
+Anomaly rate 0.2-1%, silent share 5-25%, manual share 5-30%, background noise x0.5-2.
+Ranges: practical judgement. Share of ceiling at k = 82, because the anomaly rate varies.
+
+| Ranking | Share of ceiling |
+|---|---|
+| Risk score | 0.871 ± 0.080 (lowest 0.737) |
+| Number of tests hit | 0.663 ± 0.124 (lowest 0.488) |
+| Lead of the risk score | 0.208 ± 0.070 (lowest 0.073); ahead on 30 of 30 ledgers |
+
+## Prior sensitivity (every prior x a random factor in 0.5-1.5; 20 draws per seed)
+
+| Measure | Value |
+|---|---|
+| Precision@82 | 0.819 ± 0.051 (lowest 0.671) |
+| Share of the default top 82 still listed | 0.900 ± 0.056 (lowest 0.695) |
