@@ -16,60 +16,61 @@ import pandas as pd
 
 from . import benford, flags, rules
 from .flags import FlagLog, log_flags
+from .settings import RunSettings
 
 
-def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], date_col: str = "Date",
-                     text_cols: Sequence[str] = ("Description",), id_col: str = "Sr No",
-                     weekend_days: Sequence[str] = rules.WEEKEND_DAYS, source_col: str = "Source",
-                     manual_only: bool = True, fy_end_month: int = 12, holiday_country: str = "AE",
-                     keywords: Sequence[str] = rules.DEFAULT_KEYWORDS,
-                     generic_words: Sequence[str] = rules.GENERIC_WORDS, round_multiple: float = 10_000) -> FlagLog:
+def run_python_tests(ledger: pd.DataFrame, amount_cols: Sequence[str], settings: RunSettings | None = None
+                     ) -> FlagLog:
     """
-    Run the Python tests and return ``{test name: flagged IDs}``.
+    Run the Python tests with ``settings`` (default ``RunSettings()``) and return ``{test name: flagged IDs}``.
 
-    When the ledger has ``source_col``, the manual-entry test runs, and with ``manual_only`` (the
+    When the ledger has the source column, the manual-entry test runs, and with ``manual_only`` (the
     default) the weekend, public holiday and round-amount tests count manual lines only: system
     postings on a Saturday are routine. Without the column the manual-entry test doesn't run (see
     ``tests_not_run``) and those three tests use every line. Without the text columns, the keyword
     and narration tests don't run either.
     """
-    manual = rules.manual_entries(ledger, source_col) if source_col in ledger.columns else None
-    scope = manual if manual is not None and manual_only else ledger
-    text = [c for c in text_cols if c in ledger.columns]
+    s = settings or RunSettings()
+    if s.date_col in ledger:   # read the dates once, with the run's day-first setting
+        ledger = ledger.assign(**{s.date_col: rules.parse_dates(ledger[s.date_col], s.dayfirst)})
+    manual = rules.manual_entries(ledger, s.source_col, s.manual_values) if s.source_col in ledger.columns else None
+    scope = manual if manual is not None and s.manual_only else ledger
+    text = [c for c in s.text_cols if c in ledger.columns]
     results = {
-        **({"Keyword Match": rules.keywords(ledger, text, keywords)} if text else {}),
-        "Rounded Amount": rules.rounded_amounts(scope, amount_cols, round_multiple),
+        **({"Keyword Match": rules.keywords(ledger, text, s.keywords)} if text else {}),
+        "Rounded Amount": rules.rounded_amounts(scope, amount_cols, s.round_multiple),
         "Ending 99/999": rules.ending_99(ledger, amount_cols),
-        **({"No or Vague Narration": rules.narration(ledger, text_cols[0], generic_words)} if text_cols[0] in text else {}),
-        "Period End": rules.period_end(ledger, date_col, amount_cols, fy_end_month, weekend_days=weekend_days),
-        "Public Holiday": rules.public_holidays(scope, date_col, amount_cols, holiday_country),
-        **{day: rules.day_of_week(scope, date_col, amount_cols, day) for day in weekend_days},
+        **({"No or Vague Narration": rules.narration(ledger, s.text_cols[0], s.generic_words)}
+           if s.text_cols[0] in text else {}),
+        "Period End": rules.period_end(ledger, s.date_col, amount_cols, s.fy_end_month, **s.windows),
+        "Public Holiday": rules.public_holidays(scope, s.date_col, amount_cols, s.holiday_country),
+        **{day: rules.day_of_week(scope, s.date_col, amount_cols, day) for day in s.weekend_days},
         **({"Manual Entry": manual} if manual is not None else {}),
     }
     flag_log: FlagLog = {}
     for name, result in results.items():
-        log_flags(flag_log, name, result, id_col)
+        log_flags(flag_log, name, result, s.id_col)
     return flag_log
 
 
-def tests_not_run(ledger: pd.DataFrame, source_col: str = "Source", creator_col: str = "Created By",
-                  approver_col: str = "Approved By", text_cols: Sequence[str] = ("Description",),
-                  amount_cols: Sequence[str] = (), date_col: str = "Date",
+def tests_not_run(ledger: pd.DataFrame, amount_cols: Sequence[str] = (), settings: RunSettings | None = None,
+                  creator_col: str = "Created By", approver_col: str = "Approved By",
                   duplicate_key: Sequence[str] = ("Date", "Account", "Description")) -> list[str]:
     """
     A statement for each test the ledger lacks a column for, e.g. "Manual entries not tested: no
     Source column.", each test run on fewer columns than usual, and the lines a test can't read.
     Saying so matters: silence would read as "tested, nothing found".
     """
-    needs = {"Manual entries": [source_col], "Created and approved by the same user": [creator_col, approver_col],
-             "No or vague narration": [text_cols[0]]}
+    s = settings or RunSettings()
+    needs = {"Manual entries": [s.source_col], "Created and approved by the same user": [creator_col, approver_col],
+             "No or vague narration": [s.text_cols[0]]}
     out = [f"{test} not tested: no {' or '.join(missing)} column."
            for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
-    if not any(c in ledger.columns for c in text_cols):   # the keyword test needs any one of them
-        out.append(f"Keyword match not tested: no {' or '.join(text_cols)} column.")
+    if not any(c in ledger.columns for c in s.text_cols):   # the keyword test needs any one of them
+        out.append(f"Keyword match not tested: no {' or '.join(s.text_cols)} column.")
     if missing := [c for c in duplicate_key if c not in ledger.columns]:
         out.append(f"Duplicate test limited: no {' or '.join(missing)} column, so lines are matched without it.")
-    if date_col in ledger and (n := int(pd.to_datetime(ledger[date_col], errors="coerce").isna().sum())):
+    if s.date_col in ledger and (n := int(rules.parse_dates(ledger[s.date_col], s.dayfirst).isna().sum())):
         out.append(f"Lines with a missing or unreadable date, not covered by the date tests: {n:,}.")
     raw = ledger[list(amount_cols)].replace(r"^\s*$", None, regex=True)   # blank amounts are zero, not unreadable
     if n := int((raw.notna() & raw.apply(pd.to_numeric, errors="coerce").isna()).any(axis=1).sum()):
@@ -84,12 +85,14 @@ def _idea_names(df: pd.DataFrame) -> pd.DataFrame:
 
 def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_col: str = "Account",
                       creator_col: str = "Created By", approver_col: str = "Approved By",
-                      key_cols: Sequence[str] | None = None) -> dict[str, pd.DataFrame]:
+                      key_cols: Sequence[str] | None = None, settings: RunSettings | None = None
+                      ) -> dict[str, pd.DataFrame]:
     """
     The IDEA macro's outputs, computed in Python: ``Benford Starting <d>`` (each significantly
     over-represented first digit, at most three), ``Account Summary``, ``Seldom Account Entries``,
     ``Duplicate`` and ``Same User Created and Approved`` (left out without a creator and an
-    approver column). The ground-truth column is dropped first.
+    approver column). The ground-truth column is dropped first. The seldom threshold comes from
+    ``settings``.
     """
     data = ledger.drop(columns=["Anomaly"], errors="ignore")
     key_cols = [c for c in key_cols or ["Date", account_col, "Description", *amount_cols] if c in data.columns]
@@ -101,20 +104,21 @@ def idea_side_results(ledger: pd.DataFrame, amount_cols: Sequence[str], account_
     outputs["Account Summary"] = (data.assign(ABS_AMOUNT=amount).groupby(account_col)
                                   .agg(NO_OF_RECS=(account_col, "size"), ABS_AMOUNT_SUM=("ABS_AMOUNT", "sum"))
                                   .reset_index())
-    outputs["Seldom Account Entries"] = rules.seldom_accounts(data, account_col)
+    seldom = (settings or RunSettings()).seldom_max_entries
+    outputs["Seldom Account Entries"] = rules.seldom_accounts(data, account_col, seldom)
     outputs["Duplicate"] = rules.duplicates(data, key_cols)
     if {creator_col, approver_col} <= set(data.columns):
         outputs["Same User Created and Approved"] = rules.segregation_of_duties(data, creator_col, approver_col)
     return outputs
 
 
-def idea_side_flags(ledger: pd.DataFrame, amount_cols: Sequence[str], id_col: str = "Sr No") -> FlagLog:
+def idea_side_flags(ledger: pd.DataFrame, amount_cols: Sequence[str], settings: RunSettings | None = None) -> FlagLog:
     """
     The IDEA-side flags without the Excel round trip, named as ``flags.load_idea_flags`` would name
     them (all Benford outputs as one "Benford" test; summaries without row IDs left out).
     """
-    flag_log: FlagLog = {}
-    for name, frame in idea_side_results(ledger, amount_cols).items():
+    id_col, flag_log = (settings or RunSettings()).id_col, {}
+    for name, frame in idea_side_results(ledger, amount_cols, settings=settings).items():
         if id_col not in frame.columns:
             continue
         test = "Benford" if name.startswith("Benford") else name
@@ -124,7 +128,8 @@ def idea_side_flags(ledger: pd.DataFrame, amount_cols: Sequence[str], id_col: st
 
 def write_idea_exports(ledger: pd.DataFrame, folder: str | Path, amount_cols: Sequence[str],
                        account_col: str = "Account", creator_col: str = "Created By",
-                       approver_col: str = "Approved By", key_cols: Sequence[str] | None = None) -> list[Path]:
+                       approver_col: str = "Approved By", key_cols: Sequence[str] | None = None,
+                       settings: RunSettings | None = None) -> list[Path]:
     """
     Write ``idea_side_results`` as IDEA-style Excel exports (mock fixtures, not real IDEA output).
 
@@ -134,7 +139,7 @@ def write_idea_exports(ledger: pd.DataFrame, folder: str | Path, amount_cols: Se
     folder.mkdir(parents=True, exist_ok=True)
     paths = []
     for name, frame in idea_side_results(ledger, amount_cols, account_col, creator_col, approver_col,
-                                         key_cols).items():
+                                         key_cols, settings).items():
         path = folder / f"{name}.xlsx"
         numeric = frame.select_dtypes("float").columns
         # openpyxl stores floats to 17 significant digits, so 71470.54 appears as 71470.53999999999 in
