@@ -13,12 +13,12 @@ characteristics of entries worth selecting (manual entries, round numbers, seldo
 entries with little or no description, and more), and requires selecting entries made at the end of
 the period. Simple tests for those characteristics flag thousands of lines: on the synthetic ledgers
 here, over a third of the lines meet at least one test. This project combines every test on a row
-ID and ranks the lines with a transparent score, to help the auditor select, and shows why each line
-is on the list. It supports the auditor's journal entry testing; it doesn't perform it. Selecting
+ID and ranks the journals (vouchers) those lines belong to with a transparent score, because auditors
+select and test whole vouchers, and shows why each voucher is on the list. It supports the auditor's journal entry testing; it doesn't perform it. Selecting
 entries and concluding on them stay with the audit team.
 
-On synthetic ledgers, the top-82 list is 84.6% precise (± 4.3 points over 30 seeds),
-against 64.6% for counting how many tests each line hits and 51.1% for an Isolation Forest.
+On synthetic ledgers, the top-50 list of vouchers is 84.9% precise (± 5.2 points over 30 seeds),
+against 66.5% for counting how many tests each voucher meets and 56.5% for an Isolation Forest.
 
 **Population first.** Ranking should wait until the population is confirmed complete. Per account,
 the opening trial balance plus the ledger's movements must equal the closing trial balance;
@@ -56,7 +56,7 @@ tests used.
 | Created and approved by the same user | Controls over journal entries (segregation of duties). Whether it is a breach depends on roles and the approval workflow | ISA 315 (Revised 2019) para 26(a)(ii); 240R para 36, Appendix 4 | Select |
 | Duplicate | Not an ISA 240 characteristic: a common error and fraud test | Practical judgement | Select |
 | Benford entries (lines behind over-represented first digits) | Outliers found with automated tools | 240R para A145: practical judgement | Select |
-| Priority list (the score) | A selection aid across the tests above | 240R paras 49(c)–(d), A145: practical judgement. Why each line was selected is documented (ISA 230 para 9) | Select |
+| Priority list (the score) | A selection aid across the tests above | 240R paras 49(c)–(d), A145: practical judgement. Why each voucher was selected is documented (ISA 230 para 9) | Select |
 
 **Tests that describe the ledger**: planning inputs, not findings.
 
@@ -72,7 +72,7 @@ tests used.
 | GL to TB roll-forward | Journal entry population complete for the period | ISA 500 para 9, A60; 240R paras 49(b), A140 | Population check, before any ranking |
 
 The priority list is a selection of specific items, not audit sampling (ISA 500 para 10, A52–A56),
-so nothing about the unlisted lines can be projected from it. Lines above performance materiality
+so nothing about the unlisted vouchers can be projected from it. Vouchers above performance materiality
 (ISA 320 paras 10–11) can be added to it; nothing below clearly trivial (ISA 450 para 5, A2) is
 filtered out of any test, because small or split entries can matter.
 
@@ -87,8 +87,9 @@ flowchart LR
     D --> E["Excel exports<br/>(keep SR_NO)"]
     C --> F["Consolidate<br/>on row ID"]
     E --> F
-    F --> G["Score<br/>rarity × prior,<br/>× amount"]
-    G --> H["Priority list<br/>0.577·√n, 20-150"]
+    F --> V["Group lines<br/>into vouchers"]
+    V --> G["Score<br/>rarity × prior,<br/>× voucher amount"]
+    G --> H["Priority list<br/>0.577·√n vouchers, 20-150"]
     H --> W["Working paper<br/>(Excel)"]
 ```
 
@@ -98,12 +99,16 @@ flowchart LR
   same file goes to Caseware IDEA and to Python. Every IDEA export keeps it, so the results join
   exactly. A hash of the row wouldn't work: identical duplicate lines would share it. Matching on
   date, account and amount fails for the same reason. See [`idea/README.md`](idea/README.md).
-- **Weight = ledger rarity × prior.** Rarity is `-log10(share of the ledger flagged)`, so a test
-  that flags 0.2% of lines counts much more than one that flags 12%. The prior carries what the
+- **Scored per voucher.** Auditors select and test whole journals, so lines are grouped by
+  `Voucher No` and a voucher meets a test if any of its lines does. Its amount is the larger of its
+  total debits and total credits. Without a voucher column each line is scored on its own, and the
+  cover says so.
+- **Weight = ledger rarity × prior.** Rarity is `-log10(share of vouchers flagged)`, so a test
+  that flags 0.2% of vouchers counts much more than one that flags 12%. The prior carries what the
   test has been worth across past ledgers; the values here are illustrative.
 - **Correlated tests count once.** A Saturday that is also a public holiday, or falls in a
   period-end window, is one calendar signal, not two, so only the strongest date test counts for
-  each line.
+  each voucher.
 - **Manual lines only, where the ledger says which they are.** With a `Source` column, the weekend,
   holiday and round-amount tests count manual lines only, because system postings on a Saturday are
   routine. Without one, the manual-entry test doesn't run and the outputs say so: "manual" is never
@@ -115,91 +120,115 @@ flowchart LR
 - **Benford scaled by amount diversity.** In ledgers of fixed fees or salaries, non-conformity is
   expected and says little about any one line, so Benford's weight shrinks with the share of
   distinct amounts.
-- **Amount as a log multiplier.** `1 + log10(1 + amount / median)`: large lines rise without a hard
-  cut-off, and one rare characteristic on a very large entry can still make the list.
-- **List size grows with √n.** `clip(0.577·√n, 20, 150)`: about 100 lines for a 30,000-line
-  ledger, never more than a reviewer can work through.
+- **Amount as a log multiplier.** `1 + log10(1 + voucher amount / median)`: large vouchers rise
+  without a hard cut-off, and one rare characteristic on a very large entry can still make the list.
+- **List size grows with √n.** `clip(0.577·√n, 20, 150)` for n vouchers: about 50 for a ledger of
+  7,500 vouchers, never more than a reviewer can work through.
 
 **What the benchmark can and can't show.** On the synthetic ledgers, per-ledger rarity and the amount
-multiplier clearly earn their place (about 6.5 and 7 points). The illustrative priors add about 2
+multiplier clearly earn their place (about 6 and 7.5 points). The illustrative priors add about 1.5
 points over rarity alone, within one standard deviation, and the date collapse and the Benford
 scaling make no measurable difference. The synthetic data can't test these three: it has no history
-for priors to encode, few lines where calendar tests stack, and almost no repeated amounts. They
-stay because the production tooling has to handle exactly those cases on real ledgers.
+for priors to encode, few vouchers where calendar tests stack, and almost no repeated amounts. They
+stay because the production tooling has to handle exactly those cases on real ledgers. Scoring per
+voucher ranks no better than scoring lines and listing their vouchers (see below): its value here is
+that the list, the rarities and the working paper are in the unit auditors test.
 
 More detail in [`DESIGN.md`](DESIGN.md).
 
 ## Results on synthetic data
 
-Each ledger has 20,000 lines (plus 50 double postings) with 0.5% injected anomalies, all with a
-larger amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten
-anomalies carry one to four signals, each a characteristic a test looks for; the other tenth are
+Each ledger has about 20,000 lines in about 7,550 balanced vouchers of 2 to 4 lines, plus about 20
+double-posted vouchers. 0.8% of the vouchers (about 60) are injected anomalies, all with a larger
+amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten anomalous
+vouchers carry one to four signals, each a characteristic a test looks for; the other tenth are
 "silent", an unusual amount on a common account on a weekday, from the system, with nothing for any
 test to find. Alongside them is normal business that trips the tests anyway: round rent payments,
 director fees, a fixed-price supplier, weekend postings, double postings, routine system accruals at
-quarter ends and system lines with no description. The priority list is 82 lines. Figures are the
-mean ± standard deviation over 30 seeds (30 different ledgers), from `scripts/run_benchmark.py`;
-every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full tables are in
-[`docs/benchmark_results.md`](docs/benchmark_results.md).
+quarter ends and system vouchers with no narration. The priority list is 50 vouchers. Figures are
+per voucher, the mean ± standard deviation over 30 seeds (30 different ledgers), from
+`scripts/run_benchmark.py`; every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full
+tables are in [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
-| Ranking | Precision@82 | Recall@82 |
+| Ranking | Precision@50 | Recall@50 |
 |---|---|---|
-| **Risk score** | **0.846 ± 0.043** | **0.694 ± 0.035** |
-| Number of tests hit | 0.646 ± 0.056 | 0.530 ± 0.046 |
-| Isolation Forest (unsupervised, line features) | 0.511 ± 0.050 | 0.419 ± 0.041 |
-| Amount only | 0.389 ± 0.053 | 0.319 ± 0.043 |
-| Random flagged lines | 0.012 ± 0.013 | 0.010 ± 0.011 |
-| Ceiling: best any ranking of flagged lines can do | 1.000 | 0.908 ± 0.007 |
+| **Risk score** | **0.849 ± 0.052** | **0.708 ± 0.043** |
+| Lines scored on their own, each voucher listed where its first line appears | 0.852 ± 0.053 | 0.710 ± 0.044 |
+| Number of tests hit | 0.665 ± 0.058 | 0.554 ± 0.049 |
+| Isolation Forest (unsupervised, line features; a voucher's most anomalous line) | 0.565 ± 0.079 | 0.471 ± 0.065 |
+| Voucher amount only | 0.462 ± 0.057 | 0.385 ± 0.048 |
+| Random flagged vouchers | 0.017 ± 0.020 | 0.014 ± 0.016 |
+| Ceiling: best any ranking of flagged vouchers can do | 1.000 | 0.921 ± 0.018 |
 
-How to read the ceiling: recall can't exceed the share of anomalies that trip at least one test, and
-precision can't exceed that count divided by k. The silent anomalies trip no test (apart from the
-odd chance hit on Benford's first digit), so no ranking of flagged lines can reach them and recall
-tops out at about 0.91. With 100 anomalies and a list of 82, recall is also capped at 0.82 by the
-list size. The Isolation Forest ranks the whole ledger, so it could in principle find silent
-anomalies through their amount, but it still ranks below the rules-based scores.
+How to read the ceiling: recall can't exceed the share of anomalous vouchers with at least one
+flagged line, and precision can't exceed that count divided by k. The silent anomalies trip no test
+(apart from the odd chance hit on Benford's first digit), so no ranking of flagged vouchers can reach
+them and recall tops out at about 0.92. With about 60 anomalous vouchers and a list of 50, recall is
+also capped at about 0.83 by the list size. The Isolation Forest ranks the whole ledger, so it could
+in principle find silent anomalies through their amount, but it still ranks below the rules-based
+scores.
 
-**Against 0.2.0.** The new tests and their false positives (manual entries are about 15% of the
-lines, the period-end windows about 9%) change the ledgers, so the figures aren't directly
-comparable. The risk score's precision is slightly higher (0.846 against 0.837), with more spread
-between ledgers (± 0.043 against ± 0.027). Its lead over counting tests grew from 9 points to 20,
-but mostly because counting tests got worse (0.646 against 0.750): two broad tests add a hit to
-many ordinary lines. The Isolation Forest fell too (0.511 against 0.641). When anomalies are
-scarce, the risk score is further from its ceiling than in 0.2.0 (see the sweeps). The 0.3.0
-figures (0.838) included a bug in the 99/999 test, which flagged large amounts with cents; fixing
-it in 0.3.1 added about 1 point to the risk score and left counting tests unchanged.
+**Per voucher against per line, on the same ledgers.** Scoring the lines on their own and listing
+each voucher where its first line appears does as well as scoring per voucher: 0.852 against 0.849,
+level on 19 of the 30 ledgers, ahead on 8 and behind on 3. The reason is in the generator: an
+anomalous voucher's line-level signals (a seldom account, a keyword, a round total) sit on its main
+line, and the voucher-level ones (date, manual, same user) are on every line, so the best line of an
+anomalous voucher already carries nearly everything the voucher does. Scoring per voucher would rank
+differently where signals are spread across a voucher's lines; the generator wasn't changed to show
+that, because data built to favour the method proves nothing. Per voucher is kept because it is the
+unit auditors select and test, and it makes the rarities and the list count journals rather than lines.
+
+**A voucher with more lines is flagged more often by chance.** Among normal vouchers, 38% of 2-line
+vouchers meet at least one test, against 52% of 3-line and 57% of 4-line ones. The effect on the list
+is small: 4-line vouchers are 19.9% of the vouchers and 21.3% of the priority list, 2-line vouchers
+55.0% and 53.6%. The production tooling accepts this bias, since a longer journal also has more to
+test; it is reported here rather than corrected.
+
+**Against 0.5 (scored per line).** The ledgers, the unit and the list size all changed, so the figures
+aren't directly comparable. For the record, 0.5.1 and earlier, with 20,000 single lines, 0.5% of lines
+anomalous and a list of 82 lines:
+
+| Ranking (0.4.0 to 0.5.1, per line) | Precision@82 |
+|---|---|
+| Risk score | 0.846 ± 0.043 |
+| Number of tests hit | 0.646 ± 0.056 |
+| Isolation Forest | 0.511 ± 0.050 |
+
+The risk score is about as precise per voucher as it was per line, and stays about 18 to 20 points
+ahead of counting tests. The Isolation Forest does better per voucher (0.565 against 0.511), because
+a voucher is listed by its most anomalous line, which gives it more chances.
 
 ### Which design choices earn their place
 
 The same 30 ledgers, scored with one idea switched off at a time:
 
-| Variant | Precision@82 | What it shows |
+| Variant | Precision@50 | What it shows |
 |---|---|---|
-| Full risk score | 0.846 ± 0.043 | |
-| Rarity only (all priors = 1) | 0.828 ± 0.038 | The illustrative priors add about 2 points, within one standard deviation: the synthetic data has no history for them to encode. Their job on real ledgers is to carry what past engagements showed |
-| Priors only (no rarity) | 0.781 ± 0.039 | Per-ledger rarity is worth about 6.5 points |
-| Date tests not collapsed | 0.847 ± 0.044 | No effect: the generator never puts a weekend and a period-end signal on the same anomaly, so few fall on two calendar signals at once. It matters where calendar tests pile up |
-| No amount multiplier | 0.776 ± 0.057 | Lifting large entries is worth about 7 points |
-| No Benford diversity scaling | 0.846 ± 0.043 | No effect: almost every synthetic amount is distinct, so the factor is already 1. It matters in ledgers of repeated fixed amounts |
+| Full risk score | 0.849 ± 0.052 | |
+| Rarity only (all priors = 1) | 0.833 ± 0.052 | The illustrative priors add about 1.5 points, within one standard deviation: the synthetic data has no history for them to encode. Their job on real ledgers is to carry what past engagements showed |
+| Priors only (no rarity) | 0.791 ± 0.059 | Per-ledger rarity is worth about 6 points |
+| Date tests not collapsed | 0.850 ± 0.052 | No effect: the generator never puts a weekend and a period-end signal on the same anomaly, so few vouchers fall on two calendar signals at once. It matters where calendar tests pile up |
+| No amount multiplier | 0.774 ± 0.064 | Lifting large vouchers is worth about 7.5 points |
+| No Benford diversity scaling | 0.849 ± 0.052 | No effect: almost every synthetic amount is distinct, so the factor is already 1. It matters in ledgers of repeated fixed amounts |
 
 ### Sweeps
 
 Share of ceiling is precision@k divided by the best possible precision@k, so rows with different
-ceilings can be compared. The size sweep keeps about 1.2 anomalies per list place (as in the
-20,000-line ledger), so it tests the ranking, not the ratio of anomalies to list places.
+ceilings can be compared. The size sweep keeps about 1.2 anomalous vouchers per list place (as in the
+default ledger), so it tests the ranking, not the ratio of anomalies to list places.
 
 | Ledger | k | Risk score: precision@k (share of ceiling) | Tests hit: precision@k (share of ceiling) |
 |---|---|---|---|
-| 2,000 lines, 31 anomalies | 26 | 0.886 ± 0.050 (0.886) | 0.654 ± 0.087 (0.654) |
-| 20,000 lines, 100 anomalies | 82 | 0.846 ± 0.043 (0.846) | 0.646 ± 0.056 (0.646) |
-| 200,000 lines, 180 anomalies (10 seeds) | 150 | 0.767 ± 0.023 (0.767) | 0.427 ± 0.042 (0.427) |
-| 20,000 lines, 0.1% (20 anomalies) | 82 | 0.186 ± 0.019 (0.838) | 0.125 ± 0.028 (0.565) |
-| 20,000 lines, 0.2% (40 anomalies) | 82 | 0.374 ± 0.029 (0.848) | 0.261 ± 0.035 (0.592) |
-| 20,000 lines, 1.0% (200 anomalies, saturated) | 82 | 0.998 ± 0.005 (0.998) | 0.892 ± 0.035 (0.892) |
+| 2,000 lines (about 740 vouchers, 23 anomalous) | 20 | 0.897 ± 0.068 (0.897) | 0.773 ± 0.092 (0.773) |
+| 20,000 lines (about 7,550 vouchers, 60 anomalous) | 50 | 0.849 ± 0.052 (0.849) | 0.665 ± 0.058 (0.665) |
+| 200,000 lines (about 75,700 vouchers, 181 anomalous; 10 seeds) | 150 | 0.787 ± 0.035 (0.787) | 0.549 ± 0.033 (0.549) |
+| 20,000 lines, 0.2% of vouchers (15 anomalous) | 50 | 0.225 ± 0.015 (0.841) | 0.166 ± 0.032 (0.621) |
+| 20,000 lines, 0.4% of vouchers (30 anomalous) | 50 | 0.456 ± 0.029 (0.823) | 0.325 ± 0.058 (0.585) |
+| 20,000 lines, 1.6% of vouchers (120 anomalous, saturated) | 50 | 0.998 ± 0.008 (0.998) | 0.904 ± 0.042 (0.904) |
 
 The bigger the ledger, the harder the ranking gets, and the risk score stays well ahead of
-counting tests: 23 points of share of ceiling at 2,000 lines, 34 at 200,000. When anomalies are
-scarce it reaches about 0.84 to 0.85 of the ceiling, down from about 0.9 in 0.2.0, probably because
-the broad new tests give more ordinary lines a few modest weights that compete for the list. The 1%
+counting tests: 12 points of share of ceiling at 2,000 lines, 24 at 200,000. When anomalies are
+scarce it reaches about 0.82 to 0.84 of the ceiling, against about 0.6 for counting tests. The 1.6%
 row is saturated (more anomalies than list places), so it says little about the ranking.
 
 ### Is it just the generator agreeing with itself?
@@ -207,23 +236,23 @@ row is saturated (more anomalies than list places), so it says little about the 
 The anomalies come from the same generator the scoring was designed around, so two checks test how
 much the result depends on the generator's settings and on the illustrative priors.
 
-**Generator settings drawn at random.** For each of 30 ledgers the anomaly rate (0.2% to 1%), the
-share of silent anomalies (5% to 25%), the share of manual lines (5% to 30%) and the amount of
-background noise (half to double every kind of false positive) are drawn at random. Results are in
-share of ceiling, because the anomaly rate, and so the best possible precision, changes between
+**Generator settings drawn at random.** For each of 30 ledgers the anomaly rate (0.3% to 1.6% of
+vouchers), the share of silent anomalies (5% to 25%), the share of manual vouchers (5% to 30%) and the
+amount of background noise (half to double every kind of false positive) are drawn at random. Results
+are in share of ceiling, because the anomaly rate, and so the best possible precision, changes between
 ledgers.
 
-| Ranking | Share of ceiling at k = 82 |
+| Ranking | Share of ceiling at k = 50 |
 |---|---|
-| Risk score | 0.871 ± 0.080 (lowest 0.737) |
-| Number of tests hit | 0.663 ± 0.124 (lowest 0.488) |
+| Risk score | 0.866 ± 0.096 (lowest 0.667) |
+| Number of tests hit | 0.688 ± 0.125 (lowest 0.500) |
 
-The risk score is ahead on all 30 ledgers, by 21 points on average and 7 at the least.
+The risk score is ahead on all 30 ledgers, by 18 points on average and 6 at the least.
 
 **Priors perturbed at random.** Each prior is multiplied by a random factor between 0.5 and 1.5,
-20 times on each of the 30 ledgers. Precision@82 averages 0.819 ± 0.051 (0.846 with the
-illustrative values; lowest draw 0.671), and on average 90% of the default list stays on it
-(lowest 70%). Random priors do about as well as setting every prior to 1 (0.828 in the ablation):
+20 times on each of the 30 ledgers. Precision@50 averages 0.823 ± 0.060 (0.849 with the
+illustrative values; lowest draw 0.640), and on average 90% of the default list stays on it
+(lowest 66%). Random priors do about as well as setting every prior to 1 (0.833 in the ablation):
 the result rests on per-ledger rarity and the amount multiplier, not on the exact prior values.
 
 **Caveat.** These checks vary the generator's settings, not its design: every anomaly is still one
@@ -232,22 +261,23 @@ was designed to do, which parts matter, and that it doesn't hinge on hand-picked
 evidence about real ledgers, where the irregular entries are unknown. The full tables are in
 [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
-### Why each line is on the list
+### Why each voucher is on the list
 
-`score_flags` adds a `Score Breakdown` column. The top 5 of the seed-0 list (synthetic
+`score_flags` adds a `Score Breakdown` column. The top 5 vouchers of the seed-0 list (synthetic
 descriptions), as printed by `scripts/make_fixtures.py`:
 
-| Sr No | Description | Amount | Score | Score Breakdown |
+| Voucher No | Lines | Amount | Score | Score Breakdown |
 |---|---|---|---|---|
-| 11923 | Consultancy fee (related party) | 70,000 | 57.0 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Rounded Amount 3.8 + Keyword Match 3.6 + Manual Entry 0.8, × amount 2.48 |
-| 7920 | Customer receipt | 110,000 | 51.9 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Rounded Amount 3.8 + Manual Entry 0.8, × amount 2.67 |
-| 12790 | Consultancy fee (related party) | 47,563 | 48.7 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Keyword Match 3.6 + date (Saturday) 1.4 + Manual Entry 0.8 + Benford 0.5, × amount 2.31 |
-| 14799 | Sales invoice | 29,999 | 43.1 | Same User Created and Approved 7.5 + Seldom Account Entries 7.4 + Ending 99/999 4.4 + date (Period End) 1.1, × amount 2.13 |
-| 15622 | 104522 | 100,000 | 42.1 | Same User Created and Approved 7.5 + Rounded Amount 3.8 + No or Vague Narration 2.5 + date (Saturday) 1.4 + Manual Entry 0.8, × amount 2.63 |
+| JV05068 | 2 | 100,000 | 52.8 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Rounded Amount 3.6 + date (Period End) 1.0 + Manual Entry 0.8, × amount 2.66 |
+| JV07030 | 4 | 31,913 | 44.0 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8, × amount 2.19 |
+| JV07255 | 3 | 70,000 | 42.4 | Same User Created and Approved 7.2 + Rounded Amount 3.6 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8 + Benford 0.3, × amount 2.51 |
+| JV04295 | 3 | 179,999 | 40.3 | Seldom Account Entries 7.2 + Ending 99/999 4.5 + date (Sunday) 1.4 + Manual Entry 0.8, × amount 2.91 |
+| JV01634 | 3 | 45,999 | 36.4 | Same User Created and Approved 7.2 + Ending 99/999 4.5 + Keyword Match 3.6 + Benford 0.3, × amount 2.34 |
 
-In the working paper the same lines carry a plain sentence, for example 14799: "Posted near a
-quarter end; an amount ending in 99 or 999; created and approved by the same user ID; posted to an
-account with 3 entries or fewer; a large amount (12 times the median)."
+In the working paper the same vouchers carry a plain sentence that notes partial hits, for example
+JV07030: "Posted on a Saturday; description matches the keyword list (1 of 4 lines); a manual entry;
+created and approved by the same user ID; posted to an account with 3 entries or fewer (1 of 4
+lines); a large amount (14 times the median)."
 
 ## The working paper
 
@@ -255,29 +285,31 @@ account with 3 entries or fewer; a large amount (12 times the median)."
 [`docs/sample_priority_list.xlsx`](docs/sample_priority_list.xlsx) is the seed-0 list.
 
 - **Cover**: the status ("entries meeting the test criteria, for the audit team to consider; not
-  audit findings"), source, parameters, population, whether the list is complete or a top-k cut,
+  audit findings"), source, settings, population, whether the list is complete or a top-k cut,
   the tests that couldn't run or ran on fewer columns, lines with an unreadable date or amount, the
   date run, and blank preparer and reviewer.
-- **Lines**: every listed line, with a plain "why selected" sentence next to the score breakdown,
-  the period-end window, narration issue and matched keywords in their own columns to filter on,
-  and blank columns for the audit team: Selected, Planned risk, Work done, Evidence ref, Tested by
-  / date, Auditor's conclusion.
+- **Vouchers**: every listed voucher, with a plain "why selected" sentence next to the score
+  breakdown, noting when a test flagged only some of its lines ("a round amount (1 of 3 lines)"),
+  and blank columns for the audit team, who test whole vouchers: Selected, Planned risk, Work done,
+  Evidence ref, Tested by / date, Auditor's conclusion.
+- **Lines**: every line of the listed vouchers, flagged or not, with the tests each line met and the
+  period-end window, narration issue and matched keywords in their own columns to filter on.
 - **Method**: the weights, marked "Internal to the audit team: not for the client". Selection
   criteria the client can predict weaken the test, and unpredictability is part of the response to
   fraud risk (ISA 240 para 30(c); 240R para 43).
 
-With `performance_materiality` set, lines above it are listed after the top k, in addition to it,
-and labelled; `clearly_trivial` is recorded on the cover and filters nothing.
+With `performance_materiality` set, vouchers whose amount is above it are listed after the top k,
+in addition to it, and labelled; `clearly_trivial` is recorded on the cover and filters nothing.
 
 ## Why not a trained model?
 
 - **Real audits have no labels.** Nobody hands the auditor a column saying which entries were
   irregular, so there is nothing to train a supervised model on. The Isolation Forest above needs
-  no labels, but it ranks the lines below the risk score.
-- **Auditors have to explain the selection.** A reviewer must be able to say why a line was
+  no labels, but it ranks the vouchers below the risk score.
+- **Auditors have to explain the selection.** A reviewer must be able to say why a voucher was
   picked, and the score breakdown does that directly. An anomaly score from a model doesn't.
-- **Future work: learn the priors.** Testing outcomes (which listed lines the audit team found to
-  be misstated) are labels. With enough of them, the priors could be learned, for example with a
+- **Future work: learn the priors.** Testing outcomes (which listed vouchers the audit team found
+  to be misstated) are labels. With enough of them, the priors could be learned, for example with a
   logistic regression on the test columns. That isn't done here.
 
 ## Run it
@@ -299,11 +331,12 @@ amount_cols = synthetic.amount_columns(ledger)
 tb = synthetic.make_trial_balance(ledger)
 assert population.roll_forward(ledger, tb, amount_cols).attrs["total_difference"] == 0   # population first
 settings = RunSettings()            # e.g. RunSettings(holiday_country="GB", dayfirst=False, fy_end_month=3)
-flagged = flags.consolidate(ledger,
-                            pipeline.run_python_tests(ledger, amount_cols, settings),
-                            flags.load_idea_flags("fixtures/idea_exports"))
-priority = scoring.score_flags(flagged, amount_cols)          # top 0.577·√n lines, with Score Breakdown
-export.write_working_paper(priority, "priority_list.xlsx", amount_cols, "Synthetic ledger, seed 0",
+lines = flags.consolidate(ledger,
+                          pipeline.run_python_tests(ledger, amount_cols, settings),
+                          flags.load_idea_flags("fixtures/idea_exports"), min_flags=0)
+vouchers = scoring.to_vouchers(lines, amount_cols, settings)   # one row per flagged voucher
+priority = scoring.score_flags(vouchers, ["Voucher Amount"])   # top 0.577·√n vouchers, with Score Breakdown
+export.write_working_paper(priority, lines, "priority_list.xlsx", amount_cols, "Synthetic ledger, seed 0",
                            not_run=pipeline.tests_not_run(ledger, amount_cols, settings), settings=settings)
 ```
 
@@ -316,15 +349,15 @@ project's `Exports.ILB` folder.
 
 | Path | Contents |
 |---|---|
-| `src/glrisk/synthetic.py` | Ledger generator with injected anomalies (ground truth), and a matching trial balance |
+| `src/glrisk/synthetic.py` | Generator of balanced vouchers with injected anomalies (ground truth), and a matching trial balance |
 | `src/glrisk/settings.py` | `RunSettings`: the columns, calendar, thresholds and word lists one run uses, and their cover text |
 | `src/glrisk/population.py` | GL to TB roll-forward, per account |
 | `src/glrisk/rules.py` | The tests: period end, manual entries, narration, keywords, round, 99/999, day of week, public holidays, duplicates, seldom accounts, same user |
 | `src/glrisk/benford.py` | First-digit test, MAD conformity, entries behind over-represented digits |
 | `src/glrisk/flags.py` | Flag logs, IDEA export loader, consolidation on the row ID |
-| `src/glrisk/scoring.py` | Weights, date tests counted once, amount multiplier, list size, materiality, score breakdown |
+| `src/glrisk/scoring.py` | Lines grouped into vouchers, weights, date tests counted once, amount multiplier, list size, materiality, score breakdown |
 | `src/glrisk/export.py` | The Excel working paper |
-| `src/glrisk/evaluate.py` | Rankings, ceilings, precision and recall at k, multi-seed runs and ablation |
+| `src/glrisk/evaluate.py` | Voucher rankings, ceilings, precision and recall at k, multi-seed runs, ablation, robustness and voucher-size checks |
 | `src/glrisk/ml_baseline.py` | Isolation Forest baseline (optional `[ml]` extra) |
 | `src/glrisk/pipeline.py` | Runs the Python tests, lists the tests that can't run or are limited; computes and writes the mock IDEA exports |
 | `src/glrisk/plots.py` | The demo and benchmark charts |
@@ -333,10 +366,9 @@ project's `Exports.ILB` folder.
 
 ## What I'd do next
 
-- **Score per journal (voucher), not per line.** A journal has at least two lines, so counting
-  lines overstates, and auditors select and test whole vouchers; this needs a multi-line generator.
 - **Post-closing entries**, created or edited after the period end, need a created-at column the
-  generator doesn't have.
+  generator doesn't have. With vouchers in place, this is the characteristic the revised standard
+  stresses most.
 - **Learn the priors from testing outcomes**, once enough tested lists exist (see above).
 - **Client-specific baselines**: compare each test's rate with the same client's prior years, not
   only with the current ledger.

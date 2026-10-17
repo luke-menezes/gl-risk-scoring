@@ -1,6 +1,6 @@
 """
 Rebuild the mock IDEA exports in fixtures/idea_exports and the sample working paper
-docs/sample_priority_list.xlsx from the seeded synthetic ledger, and print the top 5 for the README.
+docs/sample_priority_list.xlsx from the seeded synthetic ledger, and print the top 5 vouchers for the README.
 
     python scripts/make_fixtures.py                    # fixtures and sample
     python scripts/make_fixtures.py --ledger ledger.xlsx   # also write the ledger to import into IDEA
@@ -15,7 +15,7 @@ import inspect
 import shutil
 from pathlib import Path
 
-from glrisk import RunSettings, export, flags, pipeline, rules, scoring, synthetic
+from glrisk import RunSettings, export, flags, pipeline, scoring, synthetic
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures" / "idea_exports"
@@ -43,17 +43,17 @@ def main() -> None:
     paths = pipeline.write_idea_exports(ledger, FIXTURES, amt, settings=settings)
     print(f"Wrote {len(paths)} mock IDEA exports to {FIXTURES.relative_to(ROOT)}")
 
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, settings), flags.load_idea_flags(FIXTURES))
-    priority = scoring.score_flags(flagged, amt)
+    lines = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, settings), flags.load_idea_flags(FIXTURES),
+                              min_flags=0)
+    priority = scoring.score_flags(scoring.to_vouchers(lines, amt, settings), ["Voucher Amount"])
     size = defaults(scoring.priority_list_size)
-    parameters = {"List size": f"{size['k']} x square root of the ledger lines, within {size['floor']}-{size['ceiling']}"}
-    export.write_working_paper(priority, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
+    parameters = {"List size": f"{size['k']} x square root of the vouchers, within {size['floor']}-{size['ceiling']}"}
+    export.write_working_paper(priority, lines, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
                                parameters, pipeline.tests_not_run(ledger, amt, settings), settings)
     print(f"Wrote {SAMPLE.relative_to(ROOT)}\n")
-    print("| Sr No | Description | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")
+    print("| Voucher No | Lines | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")
     for _, row in priority.head(5).iterrows():
-        amount = rules.absolute_amount(row.to_frame().T, amt).iloc[0]
-        print(f"| {row['Sr No']} | {row['Description'] or '(blank)'} | {amount:,.0f} | {row['Score']:.1f} "
+        print(f"| {row['Voucher No']} | {row['Lines']} | {row['Voucher Amount']:,.0f} | {row['Score']:.1f} "
               f"| {row['Score Breakdown']} |")
     if args.ledger:
         ledger.drop(columns="Anomaly").to_excel(args.ledger, index=False)

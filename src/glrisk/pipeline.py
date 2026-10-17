@@ -67,6 +67,8 @@ def tests_not_run(ledger: pd.DataFrame, amount_cols: Sequence[str] = (), setting
            for test, cols in needs.items() if (missing := [c for c in cols if c not in ledger.columns])]
     if not any(c in ledger.columns for c in s.text_cols):   # the keyword test needs any one of them
         out.append(f"Keyword match not tested: no {' or '.join(s.text_cols)} column.")
+    if s.voucher_col not in ledger.columns:
+        out.append(f"Scored per line: no {s.voucher_col} column.")
     if missing := [c for c in s.dup_key if c not in ledger.columns]:
         out.append(f"Duplicate test limited: no {' or '.join(missing)} column, so lines are matched without it.")
     if s.date_col in ledger and (n := int(rules.parse_dates(ledger[s.date_col], s.dayfirst).isna().sum())):

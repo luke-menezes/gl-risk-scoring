@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.0
+
+Scored per voucher (journal), the unit auditors select and test. Every figure changes.
+
+- **Generator**: balanced vouchers of 2 to 4 lines (55%, 25%, 20%) with a `Voucher No`; a voucher's
+  lines share its date, users, source and narration, and debits equal credits. Anomalies are injected
+  per voucher (0.8% of vouchers, about 1.2 per list place): weekend, period-end, manual and same-user
+  signals on the whole voucher, a seldom account, keyword or vague narration on one line, a round or
+  99 total on the main line. Double postings copy the whole voucher. The trial balance still rolls
+  forward exactly.
+- **Scoring per voucher**: `scoring.to_vouchers` groups `consolidate(..., min_flags=0)` output by
+  `RunSettings.voucher_col` (default `Voucher No`): a voucher meets a test if any of its lines does,
+  rarity is the share of vouchers flagged, and the amount is the larger of its total debits and total
+  credits. `score_flags` is unchanged. Without the voucher column each line is its own voucher, which
+  gives exactly the 0.5 ranking, and the cover says "Scored per line".
+- **Working paper** (breaking: `write_working_paper(priority, lines, ...)`): four sheets. Vouchers
+  holds the list, "why selected" (noting partial hits, "1 of 3 lines") and the testing columns;
+  Lines holds every line of the listed vouchers, flagged or not; the cover and Method count vouchers.
+- **Benchmark per voucher** (about 20,000 lines, about 7,550 vouchers, k = 50): risk score
+  0.849 ± 0.052, counting tests 0.665 ± 0.058, Isolation Forest 0.565 ± 0.079. New baseline: the lines
+  scored on their own and listed by voucher does as well (0.852), because the generator puts an
+  anomalous voucher's line signals on one line; reported as it is. New voucher-size check: normal
+  4-line vouchers are flagged by chance more often than 2-line ones (57% against 38%) but take only a
+  little more of the list (21.3% against 19.9% of vouchers). Ablation, sweeps, stress sweep and prior
+  sensitivity re-run per voucher; the README keeps the 0.5 per-line figures for reference.
+- **Docs**: README, DESIGN, the notebook and the chart per voucher.
+
 ## 0.5.1
 
 Fixes from a review of 0.5.0, for inputs the synthetic ledger never produces. The benchmark

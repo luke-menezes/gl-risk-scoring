@@ -3,6 +3,8 @@ Rank consolidated flags into a priority list.
 
 Score = (sum of test weights, with all date tests counted once) x amount multiplier
 
+Lines are scored per voucher (``to_vouchers``): a voucher meets a test if any of its lines does.
+
 - Test weight = ledger rarity x prior. Rarity is -log10(share of the ledger the test flags), so a
   test that flags 0.1% of lines (rarity 3) counts three times as much as one that flags 10%
   (rarity 1). The prior says how useful the test has been across past ledgers.
@@ -22,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from .rules import absolute_amount
+from .settings import RunSettings
 
 # Illustrative priors, matched by keyword in the test name (case ignored). In practice they come
 # from how often each test has produced the headline finding across past engagements; these values
@@ -43,6 +46,46 @@ DEFAULT_PRIORS = {
 }
 DATE_KEYWORDS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
                  "weekend", "holiday", "quarter", "period")
+
+
+def voucher_amounts(lines: pd.DataFrame, amount_cols: Sequence[str], voucher_col: str) -> pd.Series:
+    """
+    Per voucher, the larger of its total debits and total credits: a balanced voucher's debits, and
+    a single line's own amount whichever side it is on.
+    """
+    values = lines[list(amount_cols)].apply(pd.to_numeric, errors="coerce").fillna(0)
+    signed = values.iloc[:, 0] - values.iloc[:, 1] if len(amount_cols) == 2 else values.iloc[:, 0]
+    keys = lines[voucher_col]
+    return pd.concat([signed.clip(lower=0).groupby(keys).sum(), (-signed).clip(lower=0).groupby(keys).sum()],
+                     axis=1).max(axis=1)
+
+
+def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSettings | None = None) -> pd.DataFrame:
+    """
+    One row per flagged voucher, to score with ``score_flags(vouchers, ["Voucher Amount"])``.
+
+    ``lines`` is ``flags.consolidate(..., min_flags=0)``: every line is needed for the voucher amounts.
+    A voucher meets a test if any of its lines does, so rarity becomes the share of vouchers flagged.
+    The fields the lines share (date, narration, source, users, ``Anomaly``) come from the first
+    line. Without the voucher column, each line is its own voucher and the ranking is the per-line one.
+    """
+    s = settings or RunSettings()
+    if lines.attrs.get("n_rows") != len(lines):
+        raise ValueError("pass flags.consolidate(..., min_flags=0): every line is needed for the voucher amounts")
+    key = s.voucher_col if s.voucher_col in lines else s.id_col
+    tests, groups = lines.attrs["tests"], lines.groupby(key, sort=False)
+    shared = [c for c in (s.date_col, s.text_cols[0], s.source_col, s.creator_col, s.approver_col, "Anomaly")
+              if c in lines and c != key]
+    hits = groups[tests].any()
+    out = groups[shared].first()
+    out["Lines"], out["Flagged Lines"] = groups.size(), (lines["N Flags"] > 0).groupby(lines[key], sort=False).sum()
+    out[tests] = hits
+    out["N Flags"] = hits.sum(axis=1)
+    out["Flagged By"] = [", ".join(t for t, hit in zip(tests, row) if hit) for row in hits.to_numpy()]
+    out["Voucher Amount"] = voucher_amounts(lines, amount_cols, key)
+    out = out[out["N Flags"] > 0].reset_index().sort_values("N Flags", ascending=False, kind="stable")
+    out.attrs = {"tests": tests, "test_counts": hits.sum().astype(int).to_dict(), "n_rows": len(hits), "voucher_col": key}
+    return out
 
 
 def priority_list_size(n_rows: int, floor: int = 20, ceiling: int = 150, k: float = 0.577) -> int:

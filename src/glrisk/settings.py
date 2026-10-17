@@ -19,6 +19,7 @@ class RunSettings:
     Columns, calendar, thresholds and word lists for one run.
 
     ``dayfirst`` reads ambiguous dates such as 02/03/2025 as 2 March (the UAE convention).
+    ``voucher_col`` groups lines into vouchers for scoring; without it each line is scored alone.
     ``duplicate_key`` is the columns two lines must share to be duplicates, with the amount always
     added; ``None`` means the date, account and first text column.
     ``manual_only`` limits the weekend, public holiday and round-amount tests to manual lines when
@@ -32,6 +33,7 @@ class RunSettings:
     text_cols: tuple[str, ...] = ("Description",)
     id_col: str = "Sr No"
     source_col: str = "Source"
+    voucher_col: str = "Voucher No"
     account_col: str = "Account"
     creator_col: str = "Created By"
     approver_col: str = "Approved By"
@@ -63,6 +65,8 @@ class RunSettings:
     def cover(self, has_source: bool = True) -> dict[str, str]:
         """The settings in words, for the working paper's cover (``has_source``: the ledger has ``source_col``)."""
         return {
+            "Vouchers": f"lines grouped by {self.voucher_col}; a voucher meets a test if any of its lines does; "
+                        "voucher amount = the larger of its total debits and total credits",
             "Financial year-end": f"End of {pd.Timestamp(2001, self.fy_end_month, 1):%B}",
             "Period-end windows": f"last {self.quarter_days[0]} and first {self.quarter_days[1]} days of each "
                                   f"quarter; {self.year_end_days} working days either side of the year-end",
