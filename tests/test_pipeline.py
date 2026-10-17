@@ -143,6 +143,27 @@ def test_mixed_date_formats():
     assert pipeline.tests_not_run(df, ["Amount"]) == []
 
 
+def test_dates_that_used_to_crash():
+    def read(*values):
+        return rules.parse_dates(pd.Series(values, dtype=object)).tolist()
+    ts = pd.Timestamp
+    assert read("08/03/2025 14:05:33.123456", "13/01/2025", 45724, "45724.5") == [
+        ts("2025-03-08 14:05:33.123456"), ts("2025-01-13"), ts("2025-03-08"), ts("2025-03-08 12:00")]
+    # Offsets dropped, local time kept: neither entry moves to another day
+    assert read("2025-03-08T23:30:00+04:00", "2025-03-08T23:30:00-05:00") == [ts("2025-03-08 23:30")] * 2
+    assert read("20250308")[0] == ts("2025-03-08") and pd.isna(read(12345, 1.5)).all()
+    # A whole ledger with its dates as Excel serial numbers gives the same Saturday hits
+    ledger = synthetic.make_ledger(5_000, seed=1)
+    serial = ledger.assign(Date=(ledger["Date"] - ts("1899-12-30")).dt.days)
+    amt = synthetic.amount_columns(ledger)
+    assert pipeline.run_python_tests(serial, amt)["Saturday"] == pipeline.run_python_tests(ledger, amt)["Saturday"]
+    assert pipeline.tests_not_run(serial, amt) == []
+    pytest.importorskip("sklearn")
+    from glrisk.ml_baseline import line_features
+    mixed = ledger.assign(Date=ledger["Date"].dt.strftime("%d/%m/%Y").where(ledger.index % 2 == 0, serial["Date"]))
+    assert line_features(mixed, amt)["day_of_week"].tolist() == line_features(ledger, amt)["day_of_week"].tolist()
+
+
 def test_settings_reach_the_tests_and_the_cover(tmp_path):
     df, settings = small(), RunSettings(manual_values=("System",), seldom_max_entries=5)
     log = pipeline.run_python_tests(df, ["Amount"], settings)
@@ -153,9 +174,15 @@ def test_settings_reach_the_tests_and_the_cover(tmp_path):
     path = export.write_working_paper(priority, tmp_path / "wp.xlsx", ["Amount"], "small", settings=settings)
     cover = dict(pd.read_excel(path, sheet_name="Cover").to_numpy())
     assert cover["Parameter: Manual entries"] == "Source is System (case ignored)"
-    assert cover["Parameter: Seldom-used account"] == "5 entries or fewer"
+    assert cover["Parameter: Seldom-used account"].startswith("5 entries or fewer (with real IDEA exports")
     lines = pd.read_excel(path, sheet_name="Lines")
     assert (lines["Manual"] == "Yes").tolist() == (lines["Source"] == "System").tolist()
+    # A custom duplicate key reaches the duplicate test and the cover
+    moved, by_account = small(), RunSettings(duplicate_key=("Account", "Description"))
+    moved.loc[4, "Date"] = pd.Timestamp("2025-03-05")     # line 5 now differs from line 1 only by date
+    assert pipeline.idea_side_flags(moved, ["Amount"])["Duplicate"] == set()
+    assert pipeline.idea_side_flags(moved, ["Amount"], by_account)["Duplicate"] == {"1", "5"}
+    assert by_account.cover()["Duplicate key"] == "Account, Description and the amount"
 
 
 def test_narration():

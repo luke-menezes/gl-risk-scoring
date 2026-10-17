@@ -24,6 +24,8 @@ WEEKEND_DAYS = ("Saturday", "Sunday")   # the UAE weekend since 2022
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 # Narrations that say nothing: placeholders counted as blank, and words that only say "this is a journal"
 BLANK_NARRATIONS = ("", "na", "n/a", "nil", "none", "null", "nan", "-", ".")
+# Numbers in this range are read as Excel serial dates (days since 1899-12-30): 1954 to 2119
+EXCEL_SERIALS = (20_000, 80_000)
 GENERIC_WORDS = ("adj", "adjustment", "adjusting", "jv", "je", "journal", "entry", "correction", "reclass",
                  "misc", "miscellaneous", "other", "general", "various", "sundry", "test", "tbd", "being")
 
@@ -37,16 +39,28 @@ def parse_dates(values: pd.Series, dayfirst: bool = True) -> pd.Series:
     """
     Dates from a column that may mix formats; unreadable values become NaT.
 
-    ISO dates (2025-03-08) are read first: read day first, they would become 3 August. pandas
-    guesses one format from the first remaining value and blanks the values in any other format, so
-    those are tried again one by one. ``dayfirst`` reads 02/03/2025 as 2 March.
+    A date column is kept as it is, without its time zone. Numbers in ``EXCEL_SERIALS`` are Excel
+    serial dates (a date cell that lost its format). Text has any time-zone offset dropped, keeping
+    the local date and time as written, so no entry moves to another day. ISO dates (2025-03-08)
+    are then read first: read day first, they would become 3 August. pandas guesses one format from
+    the first remaining value and blanks the values in any other format, so those are tried again
+    one by one. ``dayfirst`` reads 02/03/2025 as 2 March.
     """
-    dates = pd.to_datetime(values, errors="coerce", format="ISO8601")
-    for fmt in (None, "mixed"):   # the format pandas infers, then value by value
-        if (retry := dates.isna() & values.notna()).any():
+    if isinstance(values.dtype, pd.DatetimeTZDtype):
+        return values.dt.tz_localize(None)
+    if pd.api.types.is_datetime64_dtype(values):
+        return values
+    dates = pd.Series(pd.NaT, index=values.index, dtype="datetime64[us]")   # one unit for every pass
+    numbers = pd.to_numeric(values, errors="coerce")
+    serial = numbers.between(*EXCEL_SERIALS)
+    dates[serial] = pd.to_datetime(numbers[serial], unit="D", origin="1899-12-30").astype("datetime64[us]")
+    text = values.astype("string").str.replace(r"(\d:\d\d(?:\.\d+)?)\s*(?:Z|[+-]\d\d:?\d\d)$", r"\1", regex=True)
+    for fmt in ("ISO8601", None, "mixed"):   # ISO, the format pandas infers, then value by value
+        if (retry := dates.isna() & text.notna()).any():
             with warnings.catch_warnings():   # "could not infer format": the next pass handles it
                 warnings.filterwarnings("ignore", "Could not infer format")
-                dates[retry] = pd.to_datetime(values[retry], errors="coerce", format=fmt, dayfirst=dayfirst)
+                parsed = pd.to_datetime(text[retry], errors="coerce", format=fmt, dayfirst=dayfirst)
+                dates[retry] = parsed.astype("datetime64[us]")
     return dates
 
 

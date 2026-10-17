@@ -70,8 +70,11 @@ cover can't state a value the tests didn't use.
 silently blanks values in any other format, so `rules.parse_dates` reads ISO dates first, then the
 format pandas infers, then any remaining values one by one. Ambiguous dates are read day first by
 default (02/03/2025 is 2 March, as in the UAE); `dayfirst=False` reads them month first. ISO dates
-are read before the day-first pass because that pass would turn 2025-03-08 into 3 August. Values
-that still can't be read are counted on the cover and skipped by the date tests.
+are read before the day-first pass because that pass would turn 2025-03-08 into 3 August. Numbers
+from 20,000 to 80,000 are read as Excel serial dates, which is what a date cell holds when it loses
+its format (45724 is 8 March 2025). Time-zone offsets are dropped, keeping the local date and time as
+written: a ledger date is a local business date, and converting to UTC could move an entry onto
+another day. Values that still can't be read are counted on the cover and skipped by the date tests.
 
 ## Population first
 
