@@ -13,7 +13,7 @@ Python 3.11.5; numpy 2.4.6, pandas 3.0.6, holidays 0.106, scikit-learn 1.9.1.
 | Number of tests hit | 0.665 ± 0.058 | 0.554 ± 0.049 |
 | Isolation Forest | 0.565 ± 0.079 | 0.471 ± 0.065 |
 | Amount only | 0.462 ± 0.057 | 0.385 ± 0.048 |
-| Random flagged vouchers | 0.017 ± 0.020 | 0.014 ± 0.016 |
+| Random flagged vouchers | 0.020 ± 0.021 | 0.017 ± 0.018 |
 | Ceiling (flagged vouchers) | 1.000 ± 0.000 | 0.921 ± 0.018 |
 
 ## Ablation (one design choice removed at a time)
@@ -65,7 +65,7 @@ Ranges: practical judgement. Share of ceiling at k = 50, because the anomaly rat
 
 | Ranking | Share of ceiling |
 |---|---|
-| Risk score | 0.866 ± 0.096 (lowest 0.667) |
+| Risk score | 0.866 ± 0.097 (lowest 0.667) |
 | Number of tests hit | 0.688 ± 0.125 (lowest 0.500) |
 | Lead of the risk score | 0.178 ± 0.067 (lowest 0.060); ahead on 30 of 30 ledgers |
 
@@ -73,7 +73,7 @@ Ranges: practical judgement. Share of ceiling at k = 50, because the anomaly rat
 
 | Measure | Value |
 |---|---|
-| Precision@50 | 0.823 ± 0.060 (lowest 0.640) |
+| Precision@50 | 0.822 ± 0.060 (lowest 0.640) |
 | Share of the default top 50 still listed | 0.899 ± 0.060 (lowest 0.660) |
 
 ## Voucher size (more lines, more chances to be flagged by chance)

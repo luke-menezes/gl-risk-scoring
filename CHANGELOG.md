@@ -13,10 +13,12 @@ Scored per voucher (journal), the unit auditors select and test. Every figure ch
 - **Scoring per voucher**: `scoring.to_vouchers` groups `consolidate(..., min_flags=0)` output by
   `RunSettings.voucher_col` (default `Voucher No`): a voucher meets a test if any of its lines does,
   rarity is the share of vouchers flagged, and the amount is the larger of its total debits and total
-  credits. `score_flags` is unchanged. Without the voucher column each line is its own voucher, which
-  gives exactly the 0.5 ranking, and the cover says "Scored per line".
+  credits. The amount multiplier divides by the median over all non-zero vouchers (0.5 used the median
+  of the flagged lines), and Benford's diversity factor is measured on the non-zero line amounts it
+  tests. `score_flags` uses both when given vouchers. Without the voucher column each line is its own
+  voucher: the 0.5 per-line ranking with the median over all lines, and the cover says "Scored per line".
 - **Working paper** (breaking: `write_working_paper(priority, lines, ...)`): four sheets. Vouchers
-  holds the list, "why selected" (noting partial hits, "1 of 3 lines") and the testing columns;
+  holds the list with each voucher's accounts (main line first), "why selected" (noting partial hits, "1 of 3 lines") and the testing columns;
   Lines holds every line of the listed vouchers, flagged or not; the cover and Method count vouchers.
 - **Benchmark per voucher** (about 20,000 lines, about 7,550 vouchers, k = 50): risk score
   0.849 ± 0.052, counting tests 0.665 ± 0.058, Isolation Forest 0.565 ± 0.079. New baseline: the lines

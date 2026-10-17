@@ -67,7 +67,11 @@ def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSe
     ``lines`` is ``flags.consolidate(..., min_flags=0)``: every line is needed for the voucher amounts.
     A voucher meets a test if any of its lines does, so rarity becomes the share of vouchers flagged.
     The fields the lines share (date, narration, source, users, ``Anomaly``) come from the first
-    line. Without the voucher column, each line is its own voucher and the ranking is the per-line one.
+    line; ``Accounts`` lists the voucher's accounts, main line first. ``.attrs`` carry the median
+    amount over all non-zero vouchers (for the amount multiplier, so it doesn't depend on which tests
+    flagged what) and the diversity of the non-zero line amounts (for Benford, which tests lines).
+    Without the voucher column, each line is its own voucher: the per-line ranking, with the median
+    over all lines.
     """
     s = settings or RunSettings()
     if lines.attrs.get("n_rows") != len(lines):
@@ -82,9 +86,15 @@ def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSe
     out[tests] = hits
     out["N Flags"] = hits.sum(axis=1)
     out["Flagged By"] = [", ".join(t for t, hit in zip(tests, row) if hit) for row in hits.to_numpy()]
-    out["Voucher Amount"] = voucher_amounts(lines, amount_cols, key)
+    out["Voucher Amount"] = amounts = voucher_amounts(lines, amount_cols, key)
     out = out[out["N Flags"] > 0].reset_index().sort_values("N Flags", ascending=False, kind="stable")
-    out.attrs = {"tests": tests, "test_counts": hits.sum().astype(int).to_dict(), "n_rows": len(hits), "voucher_col": key}
+    if s.account_col in lines:
+        out.insert(1, "Accounts", out[key].map(groups[s.account_col].agg(lambda a: ", ".join(dict.fromkeys(a)))))
+    line_amounts = absolute_amount(lines, amount_cols).round(2)
+    line_amounts = line_amounts[line_amounts > 0]
+    out.attrs = {"tests": tests, "test_counts": hits.sum().astype(int).to_dict(), "n_rows": len(hits), "voucher_col": key,
+                 "median_amount": float(amounts[amounts > 0].median()) if (amounts > 0).any() else 1.0,
+                 "amount_diversity": line_amounts.nunique() / len(line_amounts) if len(line_amounts) else 1.0}
     return out
 
 
@@ -121,7 +131,8 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
     if amount_cols and benford_scaling:
         amounts = absolute_amount(flagged, amount_cols)
         nonzero = amounts[amounts > 0]
-        diversity = nonzero.round(2).nunique() / len(nonzero) if len(nonzero) else 1.0
+        diversity = flagged.attrs.get("amount_diversity",   # from to_vouchers: the line amounts Benford tests
+                                      nonzero.round(2).nunique() / len(nonzero) if len(nonzero) else 1.0)
         benford_factor = min(1.0, max(min_benford_factor, diversity / 0.5))
 
     weights, used, rarities = {}, {}, {}
@@ -181,7 +192,7 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
 
     amounts = absolute_amount(flagged, amount_cols)
     nonzero = amounts[amounts > 0]
-    median = nonzero.median() if len(nonzero) else 1.0
+    median = flagged.attrs.get("median_amount", nonzero.median() if len(nonzero) else 1.0)   # to_vouchers: all vouchers
     out = flagged.copy()
     out["Base Score"] = base.round(3)
     out["Amount Multiplier"] = (1 + np.log10(1 + amounts / median)).round(3) if amount_multiplier else 1.0

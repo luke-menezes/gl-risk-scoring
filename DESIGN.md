@@ -24,8 +24,9 @@ groups the consolidated lines by `Voucher No`: a voucher meets a test if any of 
 amount is the larger of its total debits and total credits (a balanced voucher's debits). The fields a
 voucher's lines share (date, users, source) are the voucher's, so the date, manual and same-user tests
 are voucher facts; a seldom account, a keyword or a round amount may sit on one line only, and the
-working paper says so ("1 of 3 lines"). Without a voucher column each line is its own voucher, which
-gives exactly the per-line ranking of earlier versions.
+working paper says so ("1 of 3 lines"). Without a voucher column each line is its own voucher: the
+per-line ranking of earlier versions, except that the amount multiplier divides by the median over
+all non-zero lines rather than over flagged lines (see below).
 
 A voucher with more lines has more chances to meet a test by chance. That bias is measured in the
 benchmark and reported, not corrected: the production tooling accepts it, because a longer journal
@@ -51,11 +52,15 @@ For a voucher flagged by tests T:
   gets only its strongest date test. Period end has a higher prior (1.0) than the other date
   tests (0.5), because the standard requires selecting period-end entries and doesn't for
   weekends.
-- **Benford factor** = clip(distinct amounts / non-zero amounts / 0.5, 0.2, 1), on the flagged
-  vouchers' amounts. Ledgers of repeated fixed prices fail Benford by construction; there the test
-  says little about any one entry. Repeated prices show in voucher amounts as much as in line amounts.
+- **Benford factor** = clip(distinct amounts / non-zero amounts / 0.5, 0.2, 1), on the non-zero
+  line amounts, which are what Benford tests. Ledgers of repeated fixed prices fail Benford by
+  construction; there the test says little about any one entry. Voucher totals wouldn't do: a total
+  that adds several legs varies even when every leg is a repeated fixed fee.
 - **Amount multiplier.** No hard materiality cut-off: a voucher ten times the median gets about
-  ×2.0, a hundred times about ×3.0.
+  ×2.0, a hundred times about ×3.0. The median is over **all** vouchers with a non-zero amount, so
+  it doesn't move when a test is added or a threshold changes. (Before 0.6.0 it was the median of
+  the flagged lines; the benchmark's per-line baseline keeps that, as `score_flags` does when given
+  lines directly.)
 
 ## The tests added in 0.3.0
 

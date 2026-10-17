@@ -157,7 +157,7 @@ tables are in [`docs/benchmark_results.md`](docs/benchmark_results.md).
 | Number of tests hit | 0.665 ± 0.058 | 0.554 ± 0.049 |
 | Isolation Forest (unsupervised, line features; a voucher's most anomalous line) | 0.565 ± 0.079 | 0.471 ± 0.065 |
 | Voucher amount only | 0.462 ± 0.057 | 0.385 ± 0.048 |
-| Random flagged vouchers | 0.017 ± 0.020 | 0.014 ± 0.016 |
+| Random flagged vouchers | 0.020 ± 0.021 | 0.017 ± 0.018 |
 | Ceiling: best any ranking of flagged vouchers can do | 1.000 | 0.921 ± 0.018 |
 
 How to read the ceiling: recall can't exceed the share of anomalous vouchers with at least one
@@ -244,13 +244,13 @@ ledgers.
 
 | Ranking | Share of ceiling at k = 50 |
 |---|---|
-| Risk score | 0.866 ± 0.096 (lowest 0.667) |
+| Risk score | 0.866 ± 0.097 (lowest 0.667) |
 | Number of tests hit | 0.688 ± 0.125 (lowest 0.500) |
 
 The risk score is ahead on all 30 ledgers, by 18 points on average and 6 at the least.
 
 **Priors perturbed at random.** Each prior is multiplied by a random factor between 0.5 and 1.5,
-20 times on each of the 30 ledgers. Precision@50 averages 0.823 ± 0.060 (0.849 with the
+20 times on each of the 30 ledgers. Precision@50 averages 0.822 ± 0.060 (0.849 with the
 illustrative values; lowest draw 0.640), and on average 90% of the default list stays on it
 (lowest 66%). Random priors do about as well as setting every prior to 1 (0.833 in the ablation):
 the result rests on per-ledger rarity and the amount multiplier, not on the exact prior values.
@@ -266,18 +266,18 @@ evidence about real ledgers, where the irregular entries are unknown. The full t
 `score_flags` adds a `Score Breakdown` column. The top 5 vouchers of the seed-0 list (synthetic
 descriptions), as printed by `scripts/make_fixtures.py`:
 
-| Voucher No | Lines | Amount | Score | Score Breakdown |
-|---|---|---|---|---|
-| JV05068 | 2 | 100,000 | 52.8 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Rounded Amount 3.6 + date (Period End) 1.0 + Manual Entry 0.8, × amount 2.66 |
-| JV07030 | 4 | 31,913 | 44.0 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8, × amount 2.19 |
-| JV07255 | 3 | 70,000 | 42.4 | Same User Created and Approved 7.2 + Rounded Amount 3.6 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8 + Benford 0.3, × amount 2.51 |
-| JV04295 | 3 | 179,999 | 40.3 | Seldom Account Entries 7.2 + Ending 99/999 4.5 + date (Sunday) 1.4 + Manual Entry 0.8, × amount 2.91 |
-| JV01634 | 3 | 45,999 | 36.4 | Same User Created and Approved 7.2 + Ending 99/999 4.5 + Keyword Match 3.6 + Benford 0.3, × amount 2.34 |
+| Voucher No | Accounts | Lines | Amount | Score | Score Breakdown |
+|---|---|---|---|---|---|
+| JV05068 | Suspense Account 9, VAT Payable | 2 | 100,000 | 53.9 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Rounded Amount 3.6 + date (Period End) 1.0 + Manual Entry 0.8, × amount 2.72 |
+| JV07030 | Suspense Account 22, Cash at Bank, Accounts Receivable | 4 | 31,913 | 45.1 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8, × amount 2.24 |
+| JV07255 | Payroll Expense, VAT Payable, Accounts Receivable | 3 | 70,000 | 43.3 | Same User Created and Approved 7.2 + Rounded Amount 3.6 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8 + Benford 0.3, × amount 2.57 |
+| JV04295 | Suspense Account 28, Accounts Receivable, Accounts Payable | 3 | 179,999 | 41.0 | Seldom Account Entries 7.2 + Ending 99/999 4.5 + date (Sunday) 1.4 + Manual Entry 0.8, × amount 2.97 |
+| JV01634 | Payroll Expense, VAT Payable, Accounts Receivable | 3 | 45,999 | 37.3 | Same User Created and Approved 7.2 + Ending 99/999 4.5 + Keyword Match 3.6 + Benford 0.3, × amount 2.39 |
 
 In the working paper the same vouchers carry a plain sentence that notes partial hits, for example
 JV07030: "Posted on a Saturday; description matches the keyword list (1 of 4 lines); a manual entry;
 created and approved by the same user ID; posted to an account with 3 entries or fewer (1 of 4
-lines); a large amount (14 times the median)."
+lines); a large amount (16 times the median)."
 
 ## The working paper
 
@@ -288,7 +288,7 @@ lines); a large amount (14 times the median)."
   audit findings"), source, settings, population, whether the list is complete or a top-k cut,
   the tests that couldn't run or ran on fewer columns, lines with an unreadable date or amount, the
   date run, and blank preparer and reviewer.
-- **Vouchers**: every listed voucher, with a plain "why selected" sentence next to the score
+- **Vouchers**: every listed voucher and the accounts it posted to, with a plain "why selected" sentence next to the score
   breakdown, noting when a test flagged only some of its lines ("a round amount (1 of 3 lines)"),
   and blank columns for the audit team, who test whole vouchers: Selected, Planned risk, Work done,
   Evidence ref, Tested by / date, Auditor's conclusion.

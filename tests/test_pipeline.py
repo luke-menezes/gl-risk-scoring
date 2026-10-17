@@ -285,15 +285,26 @@ def test_voucher_scoring():
     amt = synthetic.amount_columns(ledger)
     py, idea = pipeline.run_python_tests(ledger, amt), pipeline.idea_side_flags(ledger, amt)
     lines = flags.consolidate(ledger, py, idea, min_flags=0)
-    # Without a voucher column each line is its own voucher: exactly the per-line ranking and scores
-    per_line = scoring.score_flags(flags.consolidate(ledger, py, idea), amt, top_n=None)
+    # Without a voucher column each line is its own voucher: the per-line ranking and scores, with the
+    # median over all non-zero lines
     alone = scoring.score_flags(scoring.to_vouchers(lines, amt, RunSettings(voucher_col="Journal")), ["Voucher Amount"],
                                 top_n=None)
+    flagged = flags.consolidate(ledger, py, idea)
+    flagged.attrs["median_amount"] = alone.attrs["median_amount"]
+    per_line = scoring.score_flags(flagged, amt, top_n=None)
     assert alone["Sr No"].tolist() == per_line["Sr No"].tolist() and alone["Score"].tolist() == per_line["Score"].tolist()
+    every_line = rules.absolute_amount(ledger, amt)
+    assert alone.attrs["median_amount"] == every_line[every_line > 0].median()
     assert "Scored per line: no Voucher No column." in pipeline.tests_not_run(ledger.drop(columns="Voucher No"), amt)
     # A voucher meets a test if any of its lines does; rarity counts vouchers
     vouchers = scoring.to_vouchers(lines, amt)
     assert vouchers.attrs["n_rows"] == ledger["Voucher No"].nunique()
+    # The median is over all vouchers, not only the flagged ones; Accounts lists the main line's first
+    all_amounts = scoring.voucher_amounts(ledger, amt, "Voucher No")
+    assert scoring.score_flags(vouchers, ["Voucher Amount"]).attrs["median_amount"] == all_amounts.median()
+    first = vouchers.iloc[0]
+    main_account = ledger.loc[ledger["Voucher No"] == first["Voucher No"], "Account"].iloc[0]
+    assert vouchers.columns[1] == "Accounts" and first["Accounts"].startswith(main_account)
     keyword = set(ledger.loc[ledger["Sr No"].astype(str).isin(py["Keyword Match"]), "Voucher No"])
     assert set(vouchers.loc[vouchers["Keyword Match"], "Voucher No"]) == keyword
     assert vouchers.attrs["test_counts"]["Keyword Match"] == len(keyword)
@@ -304,6 +315,17 @@ def test_voucher_scoring():
     assert np.allclose(amounts, scoring.voucher_amounts(signed, ["Amount"], "Voucher No"))
     with pytest.raises(ValueError, match="min_flags=0"):
         scoring.to_vouchers(flags.consolidate(ledger, py, idea), amt)     # unflagged lines are needed
+    # Benford's diversity comes from the line amounts it tests: repeated fixed fees split over legs
+    # are hidden in varied voucher totals but not in the lines
+    # Each voucher: four fixed fees, one varying line and the credit; every voucher total differs
+    fees = pd.DataFrame({"Sr No": range(1, 241), "Voucher No": np.repeat(np.arange(40), 6),
+                         "Debit": [d for i in range(40) for d in [1000.0, 2000.0, 3000.0, 4000.0, 500.0 + i, 0.0]],
+                         "Credit": [c for i in range(40) for c in [0.0] * 5 + [10_500.0 + i]]})
+    fee_lines = flags.consolidate(fees, {"Test": {"1"}}, min_flags=0)
+    fee_vouchers = scoring.to_vouchers(fee_lines, ["Debit", "Credit"])
+    assert scoring.voucher_amounts(fees, ["Debit", "Credit"], "Voucher No").nunique() == 40   # totals all differ
+    assert fee_vouchers.attrs["amount_diversity"] < 0.5                                       # lines repeat
+    assert scoring.test_weights(fee_vouchers, amount_cols=["Voucher Amount"])[2] < 1
     bias = evaluate.size_bias(2_000, seed=0)
     assert set(bias["lines"]) == {2, 3, 4} and bias["listed"].sum() == scoring.priority_list_size(len(bias))
 
@@ -445,6 +467,6 @@ def test_working_paper(tmp_path):
     assert cover["Parameter: Public holidays"].startswith("AE calendar") and "Parameter: Large amount" in cover
     assert (lines_sheet["Manual"] == "Yes").sum() == lines_sheet["Source"].str.casefold().eq("manual").sum()
     # Filterable, frozen header, dates without a time
-    for name, cell in (("Vouchers", "C2"), ("Lines", "C2")):
+    for name, cell in (("Vouchers", "D2"), ("Lines", "C2")):
         sheet = openpyxl.load_workbook(path)[name]
         assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref and sheet[cell].number_format == "yyyy-mm-dd"

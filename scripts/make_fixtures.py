@@ -51,9 +51,9 @@ def main() -> None:
     export.write_working_paper(priority, lines, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
                                parameters, pipeline.tests_not_run(ledger, amt, settings), settings)
     print(f"Wrote {SAMPLE.relative_to(ROOT)}\n")
-    print("| Voucher No | Lines | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")
+    print("| Voucher No | Accounts | Lines | Amount | Score | Score Breakdown |\n|---|---|---|---|---|---|")
     for _, row in priority.head(5).iterrows():
-        print(f"| {row['Voucher No']} | {row['Lines']} | {row['Voucher Amount']:,.0f} | {row['Score']:.1f} "
+        print(f"| {row['Voucher No']} | {row['Accounts']} | {row['Lines']} | {row['Voucher Amount']:,.0f} | {row['Score']:.1f} "
               f"| {row['Score Breakdown']} |")
     if args.ledger:
         ledger.drop(columns="Anomaly").to_excel(args.ledger, index=False)
