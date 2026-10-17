@@ -35,8 +35,10 @@ The standards list characteristics of entries worth selecting (240 para A43; 240
 don't rank them or prescribe tests. Each test here looks for one characteristic or supports the
 auditor in another way. "Practical judgement" marks a link that is my judgement rather than the
 standard's. Every threshold, window and keyword list is practical judgement. By default the public
-holiday test uses the UAE calendar and the weekend is Saturday and Sunday; both are parameters
-(`holiday_country`, `weekend_days`) and are stated on the working paper's cover.
+holiday test uses the UAE calendar, the weekend is Saturday and Sunday, and ambiguous dates are read
+day first (02/03 is 2 March). All of these, with every threshold and word list, are fields of one
+`RunSettings` object that the tests and the working paper share, so the cover states exactly what the
+tests used.
 
 **Tests that answer a risk**: each lists entries the auditor can select from.
 
@@ -290,18 +292,19 @@ python scripts/run_benchmark.py                        # about 5 to 30 minutes; 
 ```
 
 ```python
-from glrisk import export, flags, pipeline, population, scoring, synthetic
+from glrisk import RunSettings, export, flags, pipeline, population, scoring, synthetic
 
 ledger = synthetic.make_ledger(20_000, seed=0)
 amount_cols = synthetic.amount_columns(ledger)
 tb = synthetic.make_trial_balance(ledger)
 assert population.roll_forward(ledger, tb, amount_cols).attrs["total_difference"] == 0   # population first
+settings = RunSettings()            # e.g. RunSettings(holiday_country="GB", dayfirst=False, fy_end_month=3)
 flagged = flags.consolidate(ledger,
-                            pipeline.run_python_tests(ledger, amount_cols),
+                            pipeline.run_python_tests(ledger, amount_cols, settings),
                             flags.load_idea_flags("fixtures/idea_exports"))
 priority = scoring.score_flags(flagged, amount_cols)          # top 0.577·√n lines, with Score Breakdown
 export.write_working_paper(priority, "priority_list.xlsx", amount_cols, "Synthetic ledger, seed 0",
-                           not_run=pipeline.tests_not_run(ledger, amount_cols=amount_cols))
+                           not_run=pipeline.tests_not_run(ledger, amount_cols, settings), settings=settings)
 ```
 
 `fixtures/idea_exports` holds mock IDEA exports made from the same seeded ledger
@@ -314,6 +317,7 @@ project's `Exports.ILB` folder.
 | Path | Contents |
 |---|---|
 | `src/glrisk/synthetic.py` | Ledger generator with injected anomalies (ground truth), and a matching trial balance |
+| `src/glrisk/settings.py` | `RunSettings`: the columns, calendar, thresholds and word lists one run uses, and their cover text |
 | `src/glrisk/population.py` | GL to TB roll-forward, per account |
 | `src/glrisk/rules.py` | The tests: period end, manual entries, narration, keywords, round, 99/999, day of week, public holidays, duplicates, seldom accounts, same user |
 | `src/glrisk/benford.py` | First-digit test, MAD conformity, entries behind over-represented digits |

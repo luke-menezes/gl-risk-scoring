@@ -15,11 +15,11 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-import holidays
 import pandas as pd
 
 from . import rules
 from .rules import absolute_amount, period_end_labels
+from .settings import RunSettings
 
 STATUS = "Entries meeting the test criteria, for the audit team to consider; not audit findings."
 METHOD_LABEL = "Internal to the audit team: not for the client."
@@ -63,43 +63,38 @@ def why_selected(row: pd.Series, attrs: dict, amount: float, window: str = "", s
 
 
 def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: Sequence[str], source: str,
-                        parameters: dict | None = None, not_run: Iterable[str] = (), date_col: str = "Date",
-                        fy_end_month: int = 12, weekend_days: Sequence[str] = rules.WEEKEND_DAYS,
-                        holiday_country: str = "AE", text_cols: Sequence[str] = ("Description",),
-                        source_col: str = "Source", manual_values: Iterable[str] = ("Manual",),
-                        seldom_max_entries: int = 3, keywords: Iterable[str] = rules.DEFAULT_KEYWORDS,
-                        generic_words: Iterable[str] = rules.GENERIC_WORDS,
-                        drop_cols: Sequence[str] = ("Anomaly",)) -> Path:
+                        parameters: dict | None = None, not_run: Iterable[str] = (),
+                        settings: RunSettings | None = None, drop_cols: Sequence[str] = ("Anomaly",)) -> Path:
     """
     Write ``scoring.score_flags`` output to ``path`` (xlsx) as Cover, Lines and Method sheets.
 
-    Pass the parameters the run used: the period-end window, narration issue and matched keywords
-    are recomputed for the listed lines with them, and they go on the cover with ``parameters``
-    (other thresholds, windows and word lists) and ``not_run`` (``pipeline.tests_not_run``).
-    ``seldom_max_entries`` is the seldom-account threshold the IDEA macro used. ``drop_cols`` are
-    left out of the Lines sheet, e.g. the synthetic ground truth.
+    Pass the ``settings`` the tests ran with (default ``RunSettings()``): the period-end window,
+    narration issue and matched keywords are recomputed for the listed lines with them, and they go
+    on the cover with ``parameters`` (anything else to state, e.g. the list size) and ``not_run``
+    (``pipeline.tests_not_run``). ``drop_cols`` are left out of the Lines sheet, e.g. the synthetic
+    ground truth.
     """
-    a = priority.attrs
+    s, a = settings or RunSettings(), priority.attrs
     tests, k, n = a["tests"], a["top_n"], a["n_scored"]
     amounts = absolute_amount(priority, amount_cols)
-    windows = period_end_labels(priority[date_col], fy_end_month, weekend_days=weekend_days).where(amounts > 0, "")
-    text = [c for c in text_cols if c in priority.columns]
+    dates = rules.parse_dates(priority[s.date_col], s.dayfirst)
+    windows = period_end_labels(dates, s.fy_end_month, **s.windows).where(amounts > 0, "")
+    text = [c for c in s.text_cols if c in priority.columns]
     lines = priority.drop(columns=[*tests, *drop_cols, "N Flags", "Base Score", "Amount Multiplier"], errors="ignore")
-    manual_values = tuple(manual_values)
-    if source_col in lines:
-        manual = priority.index.isin(rules.manual_entries(priority, source_col, manual_values).index)
-        lines.insert(lines.columns.get_loc(source_col) + 1, "Manual", pd.Series(manual, priority.index).map(
+    if s.source_col in lines:
+        manual = priority.index.isin(rules.manual_entries(priority, s.source_col, s.manual_values).index)
+        lines.insert(lines.columns.get_loc(s.source_col) + 1, "Manual", pd.Series(manual, priority.index).map(
             {True: "Yes", False: "No"}))
     # The facts each test found, in their own columns so the audit team can filter on them
     details = {"Period-End Window": windows,
-               "Narration Issue": rules.narration(priority, text_cols[0], generic_words,
-                                                  max_blank_share=1)["Narration Issue"] if text_cols[0] in text else None,
-               "Matched Keywords": rules.keywords(priority, text, keywords)["Matched Keywords"] if text else None}
+               "Narration Issue": rules.narration(priority, s.text_cols[0], s.generic_words,
+                                                  max_blank_share=1)["Narration Issue"] if s.text_cols[0] in text else None,
+               "Matched Keywords": rules.keywords(priority, text, s.keywords)["Matched Keywords"] if text else None}
     for name, values in details.items():
         if values is not None:
             lines.insert(lines.columns.get_loc("Score Breakdown"), name, values.reindex(priority.index, fill_value=""))
     lines.insert(lines.columns.get_loc("Score Breakdown"), "Why Selected",
-                 [why_selected(priority.loc[i], a, amounts[i], windows[i], seldom_max_entries) for i in priority.index])
+                 [why_selected(priority.loc[i], a, amounts[i], windows[i], s.seldom_max_entries) for i in priority.index])
     lines = lines.assign(**{c: "" for c in TESTING_COLUMNS})
 
     extent = (f"Complete: all {n:,} flagged lines" if k is None or k >= n
@@ -114,13 +109,7 @@ def write_working_paper(priority: pd.DataFrame, path: str | Path, amount_cols: S
              ("Clearly trivial", "Not set" if ct is None else f"{ct:,.2f} (recorded only: nothing below it is "
                                                               "filtered out, because small or split entries can matter)"),
              *[(f"Parameter: {name}", str(value)) for name, value in {
-                 "Financial year-end": f"End of {pd.Timestamp(2001, fy_end_month, 1):%B}",
-                 "Weekend days": ", ".join(weekend_days),
-                 "Public holidays": f"{holiday_country} calendar (holidays package {holidays.__version__})",
-                 **({"Manual entries": f"{source_col} is {' or '.join(manual_values)} (case ignored)"}
-                    if source_col in priority else {}),
-                 "Seldom-used account": f"{seldom_max_entries} entries or fewer",
-                 "Keywords": ", ".join(keywords), "Generic narration words": ", ".join(generic_words),
+                 **s.cover(has_source=s.source_col in priority),
                  "Large amount": f"{LARGE_MULTIPLE} times the median non-zero amount, used in \"why selected\" only "
                                  "when performance materiality isn't set (practical judgement)",
                  **(parameters or {})}.items()],

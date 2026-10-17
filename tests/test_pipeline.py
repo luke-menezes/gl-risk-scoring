@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from glrisk import benford, evaluate, export, flags, pipeline, population, rules, scoring, synthetic
+from glrisk.settings import RunSettings
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "idea_exports"
 
@@ -34,7 +35,7 @@ def test_silent_anomalies_carry_no_signal(ledger):
     amt = synthetic.amount_columns(ledger)
     # Silent anomalies are system lines, so the manual-only tests (weekend, holiday, round) can't
     # reach them; only Benford's first digit can hit one by chance
-    log = {**pipeline.run_python_tests(ledger, amt, manual_only=True), **pipeline.idea_side_flags(ledger, amt)}
+    log = {**pipeline.run_python_tests(ledger, amt, RunSettings(manual_only=True)), **pipeline.idea_side_flags(ledger, amt)}
     silent_ids = flags.id_set(silent["Sr No"])
     assert {test for test, ids in log.items() if ids & silent_ids} <= {"Benford"}
     assert (pd.to_datetime(silent["Date"]).dt.dayofweek < 5).all()
@@ -97,7 +98,7 @@ def test_manual_entries_and_manual_only_tests():
     log = pipeline.run_python_tests(df, ["Amount"])
     assert log["Manual Entry"] == {"2", "4", "5"}
     assert log["Rounded Amount"] == {"5"} and log["Saturday"] == {"2"} and log["Sunday"] == set()   # manual only
-    everything = pipeline.run_python_tests(df, ["Amount"], manual_only=False)
+    everything = pipeline.run_python_tests(df, ["Amount"], RunSettings(manual_only=False))
     assert everything["Rounded Amount"] == {"1", "5"} and everything["Sunday"] == {"3"}
     no_source = df.drop(columns=["Source"])
     assert "Manual Entry" not in pipeline.run_python_tests(no_source, ["Amount"])
@@ -129,6 +130,34 @@ def test_unreadable_values_are_stated():
         "Lines with an unreadable amount, treated as zero and skipped by the amount and date tests: 1."]
 
 
+def test_mixed_date_formats():
+    # pandas alone guesses one format from the first value and blanks the rest; ambiguous dates read day first
+    dates = rules.parse_dates(pd.Series(["13/01/2025", "2025-03-08", "31/02/2025", None]))
+    assert dates.tolist()[:2] == [pd.Timestamp("2025-01-13"), pd.Timestamp("2025-03-08")] and dates[2:].isna().all()
+    ambiguous = pd.Series(["2025-01-31", "02/03/2025"])
+    assert rules.parse_dates(ambiguous)[1] == pd.Timestamp("2025-03-02")
+    assert rules.parse_dates(ambiguous, dayfirst=False)[1] == pd.Timestamp("2025-02-03")
+    df = small().assign(Date=lambda d: d["Date"].dt.strftime("%Y-%m-%d"))
+    df.loc[1, "Date"] = "08/03/2025"          # Saturday 8 March, in another format
+    assert pipeline.run_python_tests(df, ["Amount"])["Saturday"] == {"2"}
+    assert pipeline.tests_not_run(df, ["Amount"]) == []
+
+
+def test_settings_reach_the_tests_and_the_cover(tmp_path):
+    df, settings = small(), RunSettings(manual_values=("System",), seldom_max_entries=5)
+    log = pipeline.run_python_tests(df, ["Amount"], settings)
+    idea = pipeline.idea_side_flags(df, ["Amount"], settings)
+    assert log["Manual Entry"] == {"1", "3", "6"} and idea["Seldom Account Entries"] == {str(i) for i in range(1, 7)}
+    assert pipeline.idea_side_flags(df, ["Amount"])["Seldom Account Entries"] == {"3"}
+    priority = scoring.score_flags(flags.consolidate(df, log, idea), ["Amount"], top_n=None)
+    path = export.write_working_paper(priority, tmp_path / "wp.xlsx", ["Amount"], "small", settings=settings)
+    cover = dict(pd.read_excel(path, sheet_name="Cover").to_numpy())
+    assert cover["Parameter: Manual entries"] == "Source is System (case ignored)"
+    assert cover["Parameter: Seldom-used account"] == "5 entries or fewer"
+    lines = pd.read_excel(path, sheet_name="Lines")
+    assert (lines["Manual"] == "Yes").tolist() == (lines["Source"] == "System").tolist()
+
+
 def test_narration():
     df = pd.DataFrame({"Sr No": range(10), "Text": ["", "n/a", "104522", "JV", "Being adjustment entry",
                                                     "Accrual", "Ab", None, "Rent 2025", "Supplier payment"]})
@@ -146,7 +175,7 @@ def test_text_and_user_rules():
     hits = rules.keywords(df, ["Description"])
     assert hits["Sr No"].tolist() == [2, 6]          # "Adjusted" isn't the whole word "adjust"
     assert hits["Matched Keywords"].iloc[0] == "director, write off"
-    assert pipeline.run_python_tests(df, ["Amount"], keywords=("rent",))["Keyword Match"] == {"1", "5"}
+    assert pipeline.run_python_tests(df, ["Amount"], RunSettings(keywords=("rent",)))["Keyword Match"] == {"1", "5"}
     assert rules.duplicates(df, ["Date", "Account", "Amount"])["Sr No"].tolist() == [1, 5]
     assert rules.seldom_accounts(df, "Account")["Sr No"].tolist() == [3]
     assert rules.segregation_of_duties(df, "Created By", "Approved By")["Sr No"].tolist() == [2, 3]

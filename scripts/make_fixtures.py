@@ -15,7 +15,7 @@ import inspect
 import shutil
 from pathlib import Path
 
-from glrisk import export, flags, pipeline, rules, scoring, synthetic
+from glrisk import RunSettings, export, flags, pipeline, rules, scoring, synthetic
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures" / "idea_exports"
@@ -23,7 +23,7 @@ SAMPLE = ROOT / "docs" / "sample_priority_list.xlsx"
 
 
 def defaults(func) -> dict:
-    """A function's default arguments, so the cover states the values the run actually used."""
+    """A function's default arguments, so the cover states the list size the run actually used."""
     return {name: p.default for name, p in inspect.signature(func).parameters.items()}
 
 
@@ -35,28 +35,20 @@ def main() -> None:
     args = parser.parse_args()
 
     ledger = synthetic.make_ledger(args.rows, seed=args.seed)
+    amt = synthetic.amount_columns(ledger)
+    # One settings object goes to both sides' tests and to the working paper, which states it on the cover
+    settings = RunSettings()
     if FIXTURES.exists():
         shutil.rmtree(FIXTURES)
-    paths = pipeline.write_idea_exports(ledger, FIXTURES, synthetic.amount_columns(ledger))
+    paths = pipeline.write_idea_exports(ledger, FIXTURES, amt, settings=settings)
     print(f"Wrote {len(paths)} mock IDEA exports to {FIXTURES.relative_to(ROOT)}")
 
-    amt = synthetic.amount_columns(ledger)
-    # The same parameters go to the tests and to the working paper, which recomputes details with them
-    run = {k: defaults(pipeline.run_python_tests)[k] for k in ("weekend_days", "fy_end_month", "holiday_country",
-                                                                  "keywords", "generic_words")}
-    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, **run), flags.load_idea_flags(FIXTURES))
+    flagged = flags.consolidate(ledger, pipeline.run_python_tests(ledger, amt, settings), flags.load_idea_flags(FIXTURES))
     priority = scoring.score_flags(flagged, amt)
-    windows, size = defaults(rules.period_end_labels), defaults(scoring.priority_list_size)
-    parameters = {"Period-end windows": f"last {windows['quarter_days'][0]} and first {windows['quarter_days'][1]} "
-                                        f"days of each quarter; {windows['year_end_days']} working days either side "
-                                        "of the year-end",
-                  "Weekend, holiday and round-amount tests": "manual lines only"
-                  if defaults(pipeline.run_python_tests)["manual_only"] else "all lines",
-                  "Round amount": f"multiple of {defaults(pipeline.run_python_tests)['round_multiple']:,}",
-                  "List size": f"{size['k']} x square root of the ledger lines, within {size['floor']}-{size['ceiling']}"}
+    size = defaults(scoring.priority_list_size)
+    parameters = {"List size": f"{size['k']} x square root of the ledger lines, within {size['floor']}-{size['ceiling']}"}
     export.write_working_paper(priority, SAMPLE, amt, f"Synthetic ledger, seed {args.seed} (not real data)",
-                               parameters, pipeline.tests_not_run(ledger, amount_cols=amt), **run,
-                               seldom_max_entries=defaults(rules.seldom_accounts)["max_entries"])
+                               parameters, pipeline.tests_not_run(ledger, amt, settings), settings)
     print(f"Wrote {SAMPLE.relative_to(ROOT)}\n")
     print("| Sr No | Description | Amount | Score | Score Breakdown |\n|---|---|---|---|---|")
     for _, row in priority.head(5).iterrows():
