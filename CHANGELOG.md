@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Docs**: the README opens with a three-point summary (what it does, how well, what you get), an
+  image of the sample working paper and a contents line. The ablation, sweeps, robustness checks,
+  voucher-size check and the 0.5 per-line figures move to `docs/benchmark.md`.
+
 ## 0.6.0
 
 Scored per voucher (journal), the unit auditors select and test. Every figure changes.

@@ -4,27 +4,49 @@
 ![Python 3.11-3.14](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-**Helping auditors select journal entries for testing under ISA 240: ranked, with the reasons, on
-synthetic general ledgers.**
+**Ranks the journals in a general ledger for audit testing, with the reason for each, on synthetic data.**
+
+- **What it does:** runs simple tests for the journal characteristics ISA 240 points auditors to
+  (period-end and manual entries, round amounts, seldom-used accounts, vague narration and more),
+  then ranks whole journals with a transparent score, so an audit team can select from the top 50
+  instead of thousands of flagged lines.
+- **How well:** on 30 synthetic ledgers, 85% of the top 50 journals carry injected anomalies,
+  against 67% for counting how many tests each journal meets and 57% for an Isolation Forest. An
+  ablation, size sweeps and robustness checks are included, and one result that didn't favour the
+  method is reported.
+- **What you get:** an Excel working paper with a plain-language reason for each journal and blank
+  columns for the auditor's testing, and a tested Python package (CI on Python 3.11 to 3.14).
+
+Built by [Luke Menezes](https://www.linkedin.com/in/luke-j-menezes), audit data analyst. This is a
+reduced version, rewritten on synthetic data, of tooling I built at work; that tooling and its data
+stay private.
+
+![The Vouchers sheet of the sample working paper](docs/images/working_paper_vouchers.png)
+
+*The top of the sample working paper ([download](docs/sample_priority_list.xlsx)): each journal's
+score, why it was selected, and blank columns for the audit team.*
+
+**Contents:** [Audit context](#audit-context) · [Pipeline](#pipeline) ·
+[Key design decisions](#key-design-decisions) · [Results](#results-on-synthetic-data) ·
+[The working paper](#the-working-paper) · [Why not a trained model?](#why-not-a-trained-model) ·
+[Run it](#run-it) · [What I'd do next](#what-id-do-next)
+
+## The problem
 
 ISA 240 presumes a risk that management overrides controls, for example through false journal
 entries, so the auditor must test journal entries whatever their risk assessment. The standard lists
 characteristics of entries worth selecting (manual entries, round numbers, seldom-used accounts,
 entries with little or no description, and more), and requires selecting entries made at the end of
 the period. Simple tests for those characteristics flag thousands of lines: on the synthetic ledgers
-here, over a third of the lines meet at least one test. This project combines every test on a row
-ID and ranks the journals (vouchers) those lines belong to with a transparent score, because auditors
-select and test whole vouchers, and shows why each voucher is on the list. It supports the auditor's journal entry testing; it doesn't perform it. Selecting
-entries and concluding on them stay with the audit team.
-
-On synthetic ledgers, the top-50 list of vouchers is 84.9% precise (± 5.2 points over 30 seeds),
-against 66.5% for counting how many tests each voucher meets and 56.5% for an Isolation Forest.
+here, over a third of the lines meet at least one test. This project combines every test on a row ID
+and ranks the journals (vouchers) those lines belong to with a transparent score, because auditors
+select and test whole vouchers, and shows why each voucher is on the list. It supports the auditor's
+journal entry testing; it doesn't perform it. Selecting entries and concluding on them stay with the
+audit team.
 
 **Population first.** Ranking should wait until the population is confirmed complete. Per account,
 the opening trial balance plus the ledger's movements must equal the closing trial balance;
 `population.roll_forward` returns any difference, which is resolved before testing.
-
-![Precision at k](docs/precision_at_k.png)
 
 ## Audit context
 
@@ -138,6 +160,9 @@ More detail in [`DESIGN.md`](DESIGN.md).
 
 ## Results on synthetic data
 
+On synthetic ledgers, the top-50 list of vouchers is 84.9% precise (± 5.2 points over 30 seeds),
+against 66.5% for counting how many tests each voucher meets and 56.5% for an Isolation Forest.
+
 Each ledger has about 20,000 lines in about 7,550 balanced vouchers of 2 to 4 lines, plus about 20
 double-posted vouchers. 0.8% of the vouchers (about 60) are injected anomalies, all with a larger
 amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten anomalous
@@ -160,6 +185,8 @@ tables are in [`docs/benchmark_results.md`](docs/benchmark_results.md).
 | Random flagged vouchers | 0.020 ± 0.021 | 0.017 ± 0.018 |
 | Ceiling: best any ranking of flagged vouchers can do | 1.000 | 0.921 ± 0.018 |
 
+![Precision at k](docs/precision_at_k.png)
+
 How to read the ceiling: recall can't exceed the share of anomalous vouchers with at least one
 flagged line, and precision can't exceed that count divided by k. The silent anomalies trip no test
 (apart from the odd chance hit on Benford's first digit), so no ranking of flagged vouchers can reach
@@ -178,88 +205,14 @@ differently where signals are spread across a voucher's lines; the generator was
 that, because data built to favour the method proves nothing. Per voucher is kept because it is the
 unit auditors select and test, and it makes the rarities and the list count journals rather than lines.
 
-**A voucher with more lines is flagged more often by chance.** Among normal vouchers, 38% of 2-line
-vouchers meet at least one test, against 52% of 3-line and 57% of 4-line ones. The effect on the list
-is small: 4-line vouchers are 19.9% of the vouchers and 21.3% of the priority list, 2-line vouchers
-55.0% and 53.6%. The production tooling accepts this bias, since a longer journal also has more to
-test; it is reported here rather than corrected.
+**Which parts matter.** Switched off one at a time, per-ledger rarity and the amount multiplier are
+worth about 6 and 7.5 points; the illustrative priors about 1.5, within the noise. **Robustness.**
+With the generator's own settings drawn at random, the risk score is ahead of counting tests on all
+30 ledgers, and about 90% of the list survives every prior being perturbed by up to ±50%.
 
-**Against 0.5 (scored per line).** The ledgers, the unit and the list size all changed, so the figures
-aren't directly comparable. For the record, 0.5.1 and earlier, with 20,000 single lines, 0.5% of lines
-anomalous and a list of 82 lines:
-
-| Ranking (0.4.0 to 0.5.1, per line) | Precision@82 |
-|---|---|
-| Risk score | 0.846 ± 0.043 |
-| Number of tests hit | 0.646 ± 0.056 |
-| Isolation Forest | 0.511 ± 0.050 |
-
-The risk score is about as precise per voucher as it was per line, and stays about 18 to 20 points
-ahead of counting tests. The Isolation Forest does better per voucher (0.565 against 0.511), because
-a voucher is listed by its most anomalous line, which gives it more chances.
-
-### Which design choices earn their place
-
-The same 30 ledgers, scored with one idea switched off at a time:
-
-| Variant | Precision@50 | What it shows |
-|---|---|---|
-| Full risk score | 0.849 ± 0.052 | |
-| Rarity only (all priors = 1) | 0.833 ± 0.052 | The illustrative priors add about 1.5 points, within one standard deviation: the synthetic data has no history for them to encode. Their job on real ledgers is to carry what past engagements showed |
-| Priors only (no rarity) | 0.791 ± 0.059 | Per-ledger rarity is worth about 6 points |
-| Date tests not collapsed | 0.850 ± 0.052 | No effect: the generator never puts a weekend and a period-end signal on the same anomaly, so few vouchers fall on two calendar signals at once. It matters where calendar tests pile up |
-| No amount multiplier | 0.774 ± 0.064 | Lifting large vouchers is worth about 7.5 points |
-| No Benford diversity scaling | 0.849 ± 0.052 | No effect: almost every synthetic amount is distinct, so the factor is already 1. It matters in ledgers of repeated fixed amounts |
-
-### Sweeps
-
-Share of ceiling is precision@k divided by the best possible precision@k, so rows with different
-ceilings can be compared. The size sweep keeps about 1.2 anomalous vouchers per list place (as in the
-default ledger), so it tests the ranking, not the ratio of anomalies to list places.
-
-| Ledger | k | Risk score: precision@k (share of ceiling) | Tests hit: precision@k (share of ceiling) |
-|---|---|---|---|
-| 2,000 lines (about 740 vouchers, 23 anomalous) | 20 | 0.897 ± 0.068 (0.897) | 0.773 ± 0.092 (0.773) |
-| 20,000 lines (about 7,550 vouchers, 60 anomalous) | 50 | 0.849 ± 0.052 (0.849) | 0.665 ± 0.058 (0.665) |
-| 200,000 lines (about 75,700 vouchers, 181 anomalous; 10 seeds) | 150 | 0.787 ± 0.035 (0.787) | 0.549 ± 0.033 (0.549) |
-| 20,000 lines, 0.2% of vouchers (15 anomalous) | 50 | 0.225 ± 0.015 (0.841) | 0.166 ± 0.032 (0.621) |
-| 20,000 lines, 0.4% of vouchers (30 anomalous) | 50 | 0.456 ± 0.029 (0.823) | 0.325 ± 0.058 (0.585) |
-| 20,000 lines, 1.6% of vouchers (120 anomalous, saturated) | 50 | 0.998 ± 0.008 (0.998) | 0.904 ± 0.042 (0.904) |
-
-The bigger the ledger, the harder the ranking gets, and the risk score stays well ahead of
-counting tests: 12 points of share of ceiling at 2,000 lines, 24 at 200,000. When anomalies are
-scarce it reaches about 0.82 to 0.84 of the ceiling, against about 0.6 for counting tests. The 1.6%
-row is saturated (more anomalies than list places), so it says little about the ranking.
-
-### Is it just the generator agreeing with itself?
-
-The anomalies come from the same generator the scoring was designed around, so two checks test how
-much the result depends on the generator's settings and on the illustrative priors.
-
-**Generator settings drawn at random.** For each of 30 ledgers the anomaly rate (0.3% to 1.6% of
-vouchers), the share of silent anomalies (5% to 25%), the share of manual vouchers (5% to 30%) and the
-amount of background noise (half to double every kind of false positive) are drawn at random. Results
-are in share of ceiling, because the anomaly rate, and so the best possible precision, changes between
-ledgers.
-
-| Ranking | Share of ceiling at k = 50 |
-|---|---|
-| Risk score | 0.866 ± 0.097 (lowest 0.667) |
-| Number of tests hit | 0.688 ± 0.125 (lowest 0.500) |
-
-The risk score is ahead on all 30 ledgers, by 18 points on average and 6 at the least.
-
-**Priors perturbed at random.** Each prior is multiplied by a random factor between 0.5 and 1.5,
-20 times on each of the 30 ledgers. Precision@50 averages 0.822 ± 0.060 (0.849 with the
-illustrative values; lowest draw 0.640), and on average 90% of the default list stays on it
-(lowest 66%). Random priors do about as well as setting every prior to 1 (0.833 in the ablation):
-the result rests on per-ledger rarity and the amount multiplier, not on the exact prior values.
-
-**Caveat.** These checks vary the generator's settings, not its design: every anomaly is still one
-the tests were built to look for, or a silent one. So the benchmark shows the method does what it
-was designed to do, which parts matter, and that it doesn't hinge on hand-picked numbers. It isn't
-evidence about real ledgers, where the irregular entries are unknown. The full tables are in
-[`docs/benchmark_results.md`](docs/benchmark_results.md).
+Ablation, sweeps, robustness checks, the voucher-size check and the old per-line figures:
+[docs/benchmark.md](docs/benchmark.md). Every run:
+[docs/benchmark_results.md](docs/benchmark_results.md).
 
 ### Why each voucher is on the list
 
@@ -362,6 +315,7 @@ project's `Exports.ILB` folder.
 | `src/glrisk/pipeline.py` | Runs the Python tests, lists the tests that can't run or are limited; computes and writes the mock IDEA exports |
 | `src/glrisk/plots.py` | The demo and benchmark charts |
 | `scripts/` | Fixture and sample builder, and the benchmark |
+| `docs/` | Benchmark detail ([`benchmark.md`](docs/benchmark.md)) and results, the sample working paper, `images/` |
 | `idea/` | IDEAScript sample and the cross-tool design |
 
 ## What I'd do next
@@ -377,9 +331,8 @@ project's `Exports.ILB` folder.
 
 ## About this project
 
-I built tooling like this in my work as a data analyst. This repository is a reduced, sanitised
-version on synthetic data. The production tooling and all client data stay private, and the
-scoring priors here are illustrative. Nothing here is audit advice, and no output is an audit
+The production tooling and all client data stay private, and the scoring priors here are
+illustrative. Nothing here is audit advice, and no output is an audit
 finding. [`CHANGELOG.md`](CHANGELOG.md) lists the changes by version.
 
 MIT licence.
