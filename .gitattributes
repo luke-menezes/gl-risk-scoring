@@ -1,0 +1,2 @@
+# The demo notebook is documentation: keep it out of GitHub's language statistics
+notebooks/*.ipynb linguist-documentation
