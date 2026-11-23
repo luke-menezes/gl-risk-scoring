@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Demo**: `scripts/run_demo.py` runs the whole review on a seeded synthetic ledger in one command:
+  reconciliation, both sides' tests, the working paper and a one-page Markdown summary
+  ([`docs/demo_summary.md`](docs/demo_summary.md)) that traces the top voucher to its ledger rows.
+- **Input checks** (behaviour change): `population.roll_forward` raises on unreadable or non-finite
+  amounts, which it used to count as zero (blank cells still count as zero), and `flags.consolidate`
+  raises on missing row IDs or IDs that collide after normalisation (`001` and `1`).
 - **Docs**: the README opens with a three-point summary (what it does, how well, what you get), an
   image of the sample working paper and a contents line. The ablation, sweeps, robustness checks,
   voucher-size check and the 0.5 per-line figures move to `docs/benchmark.md`.

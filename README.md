@@ -21,6 +21,9 @@ Built by [Luke Menezes](https://www.linkedin.com/in/luke-j-menezes), audit data 
 reduced version, rewritten on synthetic data, of tooling I built at work; that tooling and its data
 stay private.
 
+[View the one-page synthetic ledger review](docs/demo_summary.md) or [run the demo](#run-it)
+to generate it alongside the Excel working paper.
+
 ![The Vouchers sheet of the sample working paper](docs/images/working_paper_vouchers.png)
 
 *The top of the sample working paper ([download](docs/sample_priority_list.xlsx)): each journal's
@@ -271,10 +274,16 @@ in addition to it, and labelled; `clearly_trivial` is recorded on the cover and 
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev,ml]"                             # [ml] adds scikit-learn for the Isolation Forest
 #   add -c docs/benchmark-constraints.txt for the exact versions behind the published figures
+python scripts/run_demo.py --output-dir demo-output    # writes the working paper and review summary
 python -m pytest
 jupyter notebook notebooks/demo.ipynb
 python scripts/run_benchmark.py                        # about 5 to 30 minutes; --quick for a smoke test
 ```
+
+The demo generates a synthetic ledger, a matching trial balance and mock IDEA exports in one run.
+It writes `priority_list.xlsx` and `review_summary.md` after the checks pass. Reconciliation rejects
+unreadable or non-finite amounts while treating blank amount cells as zero. Flag consolidation requires
+populated row IDs that stay unique after normalisation, so `001` and `1` cannot both identify different lines.
 
 ```python
 from glrisk import RunSettings, export, flags, pipeline, population, scoring, synthetic
@@ -314,7 +323,7 @@ project's `Exports.ILB` folder.
 | `src/glrisk/ml_baseline.py` | Isolation Forest baseline (optional `[ml]` extra) |
 | `src/glrisk/pipeline.py` | Runs the Python tests, lists the tests that can't run or are limited; computes and writes the mock IDEA exports |
 | `src/glrisk/plots.py` | The demo and benchmark charts |
-| `scripts/` | Fixture and sample builder, and the benchmark |
+| `scripts/` | Fixture builder, end-to-end demo, and benchmark |
 | `docs/` | Benchmark detail ([`benchmark.md`](docs/benchmark.md)) and results, the sample working paper, `images/` |
 | `idea/` | IDEAScript sample and the cross-tool design |
 

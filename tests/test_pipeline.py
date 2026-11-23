@@ -236,6 +236,21 @@ def test_ids_normalised_across_tools():
     assert flags.id_set(["0000123", "123.0", " 45 ", None, ""]) == {"123", "45"}
 
 
+@pytest.mark.parametrize("missing_id", [None, pd.NA, "", " \t "])
+def test_consolidate_rejects_missing_row_ids(missing_id):
+    ledger = pd.DataFrame({"Sr No": ["001", missing_id]})
+    with pytest.raises(ValueError, match="1 missing row ID"):
+        flags.consolidate(ledger, {"Example": {"1"}}, min_flags=0)
+
+
+def test_consolidate_rejects_colliding_row_ids():
+    ledger = pd.DataFrame({"Sr No": ["001", "1"]})
+    with pytest.raises(ValueError, match="duplicate row IDs after normalisation"):
+        flags.consolidate(ledger, {"Example": {"1"}}, min_flags=0)
+    flagged = flags.consolidate(ledger.iloc[:1], {"Example": {"1"}})
+    assert flagged["Sr No"].tolist() == ["001"]
+
+
 def test_consolidate_and_score():
     df = small()
     log = {"Keyword Match": {"2", "6"}, "Saturday": {"2"}, "Sunday": {"3"}, "Public Holiday": {"2"}}
@@ -417,6 +432,29 @@ def test_roll_forward_finds_a_missing_line():
     result = population.roll_forward(ledger.drop(index=10), tb, amt)
     assert result.iloc[0]["Account"] == missing["Account"]
     assert result.attrs["total_difference"] == pytest.approx(missing["Debit"] + missing["Credit"])
+
+
+@pytest.mark.parametrize("invalid_amount", ["unreadable", float("inf"), "-inf"])
+def test_roll_forward_rejects_invalid_ledger_amounts(invalid_amount):
+    ledger = pd.DataFrame({"Account": ["A", "A", "B"], "Debit": [5, invalid_amount, None], "Credit": [None, "", 5]})
+    tb = pd.DataFrame({"Account": ["A", "B"], "Opening": [0, 0], "Closing": [5, -5]})
+    with pytest.raises(ValueError, match=r"Ledger.*unreadable or non-finite amounts \(Debit: 1\)"):
+        population.roll_forward(ledger, tb, ["Debit", "Credit"])
+
+
+def test_roll_forward_rejects_invalid_trial_balance_amounts():
+    ledger = pd.DataFrame({"Account": ["A"], "Amount": [5]})
+    tb = pd.DataFrame({"Account": ["A"], "Opening": [0], "Closing": ["unreadable"]})
+    with pytest.raises(ValueError, match=r"Trial balance.*unreadable or non-finite amounts \(Closing: 1\)"):
+        population.roll_forward(ledger, tb, ["Amount"])
+
+
+def test_roll_forward_accepts_blank_amounts():
+    ledger = pd.DataFrame({"Account": ["A", "A", "B"], "Debit": ["5", " ", None], "Credit": [None, "", "5"]})
+    tb = pd.DataFrame({"Account": ["A", "B"], "Opening": ["", None], "Closing": ["5", "-5"]})
+    result = population.roll_forward(ledger, tb, ["Debit", "Credit"])
+    assert result.attrs["total_difference"] == 0.0
+    assert result.set_index("Account")["Movement"].to_dict() == {"A": 5, "B": -5}
 
 
 def test_performance_materiality_lines_are_always_listed():

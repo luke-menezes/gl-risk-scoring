@@ -24,7 +24,7 @@ def normalise_ids(values: pd.Series) -> pd.Series:
     "0000123" as the number 123 (or 123.0). Other IDs are only trimmed.
     """
     ids = pd.Series(values).astype(str).str.strip()
-    numeric = ids.str.fullmatch(r"\d+(\.0+)?")
+    numeric = ids.str.fullmatch(r"\d+(\.0+)?", na=False)
     ids[numeric] = ids[numeric].str.replace(r"\.0+$", "", regex=True).str.lstrip("0").replace("", "0")
     return ids
 
@@ -87,6 +87,7 @@ def consolidate(df: pd.DataFrame, *flag_logs: FlagLog, id_col: str = "Sr No", mi
     Tests with the same name in several logs (e.g. a test run in both Python and IDEA) are combined
     into one. Rows flagged by fewer than ``min_flags`` tests are dropped (0 keeps every row). The
     ledger size and each test's count are kept in ``.attrs`` for the scoring.
+    Ledger IDs must be present and unique after normalisation.
     """
     if id_col not in df.columns:
         raise KeyError(f"'{id_col}' not in the ledger")
@@ -99,7 +100,15 @@ def consolidate(df: pd.DataFrame, *flag_logs: FlagLog, id_col: str = "Sr No", mi
         raise ValueError(f"Test names clash with ledger columns: {clashes}")
 
     ids = normalise_ids(df[id_col])
-    unmatched = {t: len(s - set(ids)) for t, s in tests.items() if s - set(ids)}
+    missing = df[id_col].isna() | ids.eq("")
+    if missing.any():
+        raise ValueError(f"Ledger column {id_col!r} has {missing.sum():,} missing row IDs.")
+    duplicates = ids[ids.duplicated()]
+    if not duplicates.empty:
+        examples = ", ".join(repr(value) for value in duplicates.unique()[:5])
+        raise ValueError(f"Ledger column {id_col!r} has duplicate row IDs after normalisation (e.g. {examples}).")
+    ledger_ids = set(ids)
+    unmatched = {test: len(extra) for test, flagged in tests.items() if (extra := flagged - ledger_ids)}
     if unmatched:
         raise ValueError(f"Flagged IDs not in the ledger (check the ID format): {unmatched}")
     out = df.copy()

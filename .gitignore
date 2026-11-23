@@ -8,3 +8,5 @@ __pycache__/
 # Ledgers written for IDEA by scripts/make_fixtures.py --ledger
 /ledger*.xlsx
 ~$*
+# Output of scripts/run_demo.py
+/demo-output/
