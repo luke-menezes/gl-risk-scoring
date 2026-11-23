@@ -1,5 +1,5 @@
 """
-Rank consolidated flags into a priority list.
+Rank consolidated flags into a list of vouchers suggested for review.
 
 Score = (sum of test weights, with all date tests counted once) x amount multiplier
 
@@ -18,6 +18,7 @@ Lines are scored per voucher (``to_vouchers``): a voucher meets a test if any of
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 
 import numpy as np
@@ -100,10 +101,11 @@ def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSe
 
 def priority_list_size(n_rows: int, floor: int = 20, ceiling: int = 150, k: float = 0.577) -> int:
     """
-    Suggested priority list length: grows with the square root of ledger size, within [floor, ceiling].
+    Length of the suggested list: grows with the square root of ``n_rows``, within [floor, ceiling].
 
-    Small ledgers still get a useful list; very large ones stay reviewable. k = 0.577 puts a
-    30,000-line ledger at 100 entries.
+    ``n_rows`` is the number of vouchers (lines when scoring per line). Small ledgers still get a
+    useful list; very large ones stay reviewable. k = 0.577 puts 30,000 vouchers at 100; the seed-0
+    synthetic ledger (about 20,000 lines in 7,559 vouchers) gets 50.
     """
     return int(max(floor, min(ceiling, round(k * np.sqrt(n_rows)))))
 
@@ -139,7 +141,11 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
     for test in tests:
         rarity = -np.log10(max(counts.get(test, 0), 1) / n_rows) if use_rarity else 1.0
         default = priors["date"] if test in date_tests else 1.0
-        prior = next((v for k, v in priors.items() if k != "date" and k in test.lower()), default)
+        prior = next((v for k, v in priors.items() if k != "date" and k in test.lower()), None)
+        if prior is None:
+            prior = default
+            if test not in date_tests:   # e.g. a misspelt or new test: say so rather than use 1.0 silently
+                warnings.warn(f"No prior key matches test {test!r}: using {default}", stacklevel=2)
         used[test] = prior if use_priors else 1.0
         rarities[test] = round(float(rarity), 3)
         weight = rarity * used[test] * (benford_factor if "benford" in test.lower() else 1.0)

@@ -20,8 +20,8 @@ def test_demo_writes_workbook_and_summary(tmp_path):
         cwd=tmp_path, check=True, capture_output=True, text=True,
     )
 
-    assert {path.name for path in output.iterdir()} == {"priority_list.xlsx", "review_summary.md"}
-    workbook = pd.read_excel(output / "priority_list.xlsx", sheet_name=None)
+    assert {path.name for path in output.iterdir()} == {"working_paper.xlsx", "review_summary.md"}
+    workbook = pd.read_excel(output / "working_paper.xlsx", sheet_name=None)
     assert list(workbook) == ["Cover", "Vouchers", "Lines", "Method"]
     cover = workbook["Cover"].set_index("Item")["Value"]
     assert "difference 0.00" in cover["Parameter: Population check"]

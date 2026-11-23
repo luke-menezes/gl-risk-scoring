@@ -336,13 +336,21 @@ def test_voucher_scoring():
     fees = pd.DataFrame({"Sr No": range(1, 241), "Voucher No": np.repeat(np.arange(40), 6),
                          "Debit": [d for i in range(40) for d in [1000.0, 2000.0, 3000.0, 4000.0, 500.0 + i, 0.0]],
                          "Credit": [c for i in range(40) for c in [0.0] * 5 + [10_500.0 + i]]})
-    fee_lines = flags.consolidate(fees, {"Test": {"1"}}, min_flags=0)
+    fee_lines = flags.consolidate(fees, {"Benford": {"1"}}, min_flags=0)
     fee_vouchers = scoring.to_vouchers(fee_lines, ["Debit", "Credit"])
     assert scoring.voucher_amounts(fees, ["Debit", "Credit"], "Voucher No").nunique() == 40   # totals all differ
     assert fee_vouchers.attrs["amount_diversity"] < 0.5                                       # lines repeat
     assert scoring.test_weights(fee_vouchers, amount_cols=["Voucher Amount"])[2] < 1
     bias = evaluate.size_bias(2_000, seed=0)
     assert set(bias["lines"]) == {2, 3, 4} and bias["listed"].sum() == scoring.priority_list_size(len(bias))
+
+
+def test_unmatched_test_name_warns_and_takes_neutral_prior():
+    flagged = pd.DataFrame({"Odd Check": [True, False], "Keyword Match": [False, True]})
+    flagged.attrs.update(tests=["Odd Check", "Keyword Match"], test_counts={"Odd Check": 1, "Keyword Match": 1}, n_rows=2)
+    with pytest.warns(UserWarning, match="No prior key matches test 'Odd Check'"):
+        _, _, _, used, _ = scoring.test_weights(flagged)
+    assert used == {"Odd Check": 1.0, "Keyword Match": scoring.DEFAULT_PRIORS["keyword"]}
 
 
 def test_every_test_has_a_prior():

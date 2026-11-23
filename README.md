@@ -26,7 +26,7 @@ to generate it alongside the Excel working paper.
 
 ![The Vouchers sheet of the sample working paper](docs/images/working_paper_vouchers.png)
 
-*The top of the sample working paper ([download](docs/sample_priority_list.xlsx)): each journal's
+*The top of the sample working paper ([download](docs/sample_working_paper.xlsx)): each journal's
 score, why it was selected, and blank columns for the audit team.*
 
 **Contents:** [Audit context](#audit-context) · [Pipeline](#pipeline) ·
@@ -81,7 +81,7 @@ tests used.
 | Created and approved by the same user | Controls over journal entries (segregation of duties). Whether it is a breach depends on roles and the approval workflow | ISA 315 (Revised 2019) para 26(a)(ii); 240R para 36, Appendix 4 | Select |
 | Duplicate | Not an ISA 240 characteristic: a common error and fraud test | Practical judgement | Select |
 | Benford entries (lines behind over-represented first digits) | Outliers found with automated tools | 240R para A145: practical judgement | Select |
-| Priority list (the score) | A selection aid across the tests above | 240R paras 49(c)–(d), A145: practical judgement. Why each voucher was selected is documented (ISA 230 para 9) | Select |
+| Vouchers suggested for review (the score) | A selection aid across the tests above | 240R paras 49(c)–(d), A145: practical judgement. Why each voucher was selected is documented (ISA 230 para 9) | Select |
 
 **Tests that describe the ledger**: planning inputs, not findings.
 
@@ -96,7 +96,7 @@ tests used.
 |---|---|---|---|
 | GL to TB roll-forward | Journal entry population complete for the period | ISA 500 para 9, A60; 240R paras 49(b), A140 | Population check, before any ranking |
 
-The priority list is a selection of specific items, not audit sampling (ISA 500 para 10, A52–A56),
+The suggested list is a selection of specific items, not audit sampling (ISA 500 para 10, A52–A56),
 so nothing about the unlisted vouchers can be projected from it. Vouchers above performance materiality
 (ISA 320 paras 10–11) can be added to it; nothing below clearly trivial (ISA 450 para 5, A2) is
 filtered out of any test, because small or split entries can matter.
@@ -114,7 +114,7 @@ flowchart LR
     E --> F
     F --> V["Group lines<br/>into vouchers"]
     V --> G["Score<br/>rarity × prior,<br/>× voucher amount"]
-    G --> H["Priority list<br/>0.577·√n vouchers, 20-150"]
+    G --> H["Vouchers suggested for review<br/>0.577·√n, 20-150"]
     H --> W["Working paper<br/>(Excel)"]
 ```
 
@@ -173,7 +173,7 @@ vouchers carry one to four signals, each a characteristic a test looks for; the 
 "silent", an unusual amount on a common account on a weekday, from the system, with nothing for any
 test to find. Alongside them is normal business that trips the tests anyway: round rent payments,
 director fees, a fixed-price supplier, weekend postings, double postings, routine system accruals at
-quarter ends and system vouchers with no narration. The priority list is 50 vouchers. Figures are
+quarter ends and system vouchers with no narration. The list suggests 50 vouchers. Figures are
 per voucher, the mean ± standard deviation over 30 seeds (30 different ledgers), from
 `scripts/run_benchmark.py`; every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full
 tables are in [`docs/benchmark_results.md`](docs/benchmark_results.md).
@@ -237,8 +237,8 @@ lines); a large amount (16 times the median)."
 
 ## The working paper
 
-`export.write_working_paper` writes the priority list as an Excel working paper:
-[`docs/sample_priority_list.xlsx`](docs/sample_priority_list.xlsx) is the seed-0 list.
+`export.write_working_paper` writes the vouchers suggested for review as an Excel working paper:
+[`docs/sample_working_paper.xlsx`](docs/sample_working_paper.xlsx) is the seed-0 list.
 
 - **Cover**: the status ("entries meeting the test criteria, for the audit team to consider; not
   audit findings"), source, settings, population, whether the list is complete or a top-k cut,
@@ -281,7 +281,7 @@ python scripts/run_benchmark.py                        # about 5 to 30 minutes; 
 ```
 
 The demo generates a synthetic ledger, a matching trial balance and mock IDEA exports in one run.
-It writes `priority_list.xlsx` and `review_summary.md` after the checks pass. Reconciliation rejects
+It writes `working_paper.xlsx` and `review_summary.md` after the checks pass. Reconciliation rejects
 unreadable or non-finite amounts while treating blank amount cells as zero. Flag consolidation requires
 populated row IDs that stay unique after normalisation, so `001` and `1` cannot both identify different lines.
 
@@ -297,8 +297,8 @@ lines = flags.consolidate(ledger,
                           pipeline.run_python_tests(ledger, amount_cols, settings),
                           flags.load_idea_flags("fixtures/idea_exports"), min_flags=0)
 vouchers = scoring.to_vouchers(lines, amount_cols, settings)   # one row per flagged voucher
-priority = scoring.score_flags(vouchers, ["Voucher Amount"])   # top 0.577·√n vouchers, with Score Breakdown
-export.write_working_paper(priority, lines, "priority_list.xlsx", amount_cols, "Synthetic ledger, seed 0",
+suggested = scoring.score_flags(vouchers, ["Voucher Amount"])   # top 0.577·√n vouchers, with Score Breakdown
+export.write_working_paper(suggested, lines, "working_paper.xlsx", amount_cols, "Synthetic ledger, seed 0",
                            not_run=pipeline.tests_not_run(ledger, amount_cols, settings), settings=settings)
 ```
 

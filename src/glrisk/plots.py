@@ -1,4 +1,4 @@
-"""The four demo charts: flag overlap, score distribution, Benford first digits, priority-list amounts."""
+"""The four demo charts: flag overlap, score distribution, Benford first digits, the suggested vouchers' amounts."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def score_distribution(scored_all: pd.DataFrame, list_size: int, truth_col: str 
     ax.hist(scored_all.loc[injected, "Score"], bins=bins, color=ORANGE, alpha=0.9, label="Injected anomalies")
     cutoff = scored_all["Score"].nlargest(list_size).min()
     ax.axvline(cutoff, color="black", linestyle="--", linewidth=1)
-    ax.text(cutoff, ax.get_ylim()[1] * 0.95, f"  priority list ({list_size})", va="top", fontsize=9)
+    ax.text(cutoff, ax.get_ylim()[1] * 0.95, f"  suggested list ({list_size})", va="top", fontsize=9)
     ax.set_yscale("log")
     ax.set_title("Risk score of flagged vouchers")
     ax.set_xlabel("Score")
@@ -73,7 +73,7 @@ def benford_chart(table: pd.DataFrame, ax: plt.Axes | None = None) -> plt.Axes:
 
 def priority_amounts(priority: pd.DataFrame, amount_cols: Sequence[str], truth_col: str = "Anomaly",
                      ax: plt.Axes | None = None) -> plt.Axes:
-    """Score against amount for the priority list, injected anomalies highlighted."""
+    """Score against amount for the suggested vouchers, injected anomalies highlighted."""
     ax = ax or plt.subplots(figsize=(9, 5))[1]
     amount = absolute_amount(priority, amount_cols)
     injected = priority[truth_col] != "" if truth_col in priority else pd.Series(False, index=priority.index)
@@ -81,7 +81,7 @@ def priority_amounts(priority: pd.DataFrame, amount_cols: Sequence[str], truth_c
     ax.scatter(amount[injected], priority.loc[injected, "Score"], color=ORANGE, label="Injected anomalies", s=30)
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(FuncFormatter(_compact))
-    ax.set_title(f"Priority list ({len(priority)} vouchers): score and amount")
+    ax.set_title(f"Vouchers suggested for review ({len(priority)}): score and amount")
     ax.set_xlabel("Amount (log scale)")
     ax.set_ylabel("Score")
     ax.legend(frameon=False)

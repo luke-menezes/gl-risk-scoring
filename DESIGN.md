@@ -123,7 +123,13 @@ line of those vouchers (flagged or not, so the tester sees the whole journal), a
 and is marked internal to the audit team, because selection criteria the client can predict
 weaken the test.
 
-## Priority list size
+## Size of the suggested list
+
+The output is called the vouchers suggested for review, not a priority list: "priority" would read as
+an audit judgement that these entries matter most, when the score only ranks the flagged vouchers by
+this method. A voucher off the list can still need testing. (Code names such as
+`priority_list_size` keep the shorter word.)
+
 
 `clip(round(0.577 × √n), 20, 150)` for n vouchers. The square root means a ledger 100 times larger
 gets a list 10 times longer: bigger ledgers deserve more attention, but review time doesn't scale linearly. The

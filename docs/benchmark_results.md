@@ -78,7 +78,7 @@ Ranges: practical judgement. Share of ceiling at k = 50, because the anomaly rat
 
 ## Voucher size (more lines, more chances to be flagged by chance)
 
-| Lines per voucher | Share of vouchers | Share of the priority list | Normal vouchers flagged |
+| Lines per voucher | Share of vouchers | Share of the suggested list | Normal vouchers flagged |
 |---|---|---|---|
 | 2 | 55.0% | 53.6% | 38.0% |
 | 3 | 25.1% | 25.1% | 51.9% |
