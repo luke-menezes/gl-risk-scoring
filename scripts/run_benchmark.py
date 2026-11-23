@@ -129,7 +129,7 @@ def main() -> None:
            f"| Precision@{k} | {spread(priors['precision'])} |",
            f"| Share of the default top {k} still listed | {spread(priors['overlap'])} |",
            "\n## Voucher size (more lines, more chances to be flagged by chance)\n",
-           "| Lines per voucher | Share of vouchers | Share of the priority list | Normal vouchers flagged |",
+           "| Lines per voucher | Share of vouchers | Share of the suggested list | Normal vouchers flagged |",
            "|---|---|---|---|"]
     listed, normal = bias[bias["listed"]], bias[bias["normal"]]
     for size, group in bias.groupby("lines"):

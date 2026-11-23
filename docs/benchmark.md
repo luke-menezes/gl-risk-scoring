@@ -74,7 +74,7 @@ evidence about real ledgers, where the irregular entries are unknown. The full t
 
 **A voucher with more lines is flagged more often by chance.** Among normal vouchers, 38% of 2-line
 vouchers meet at least one test, against 52% of 3-line and 57% of 4-line ones. The effect on the list
-is small: 4-line vouchers are 19.9% of the vouchers and 21.3% of the priority list, 2-line vouchers
+is small: 4-line vouchers are 19.9% of the vouchers and 21.3% of the suggested list, 2-line vouchers
 55.0% and 53.6%. The production tooling accepts this bias, since a longer journal also has more to
 test; it is reported here rather than corrected.
 

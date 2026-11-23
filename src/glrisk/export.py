@@ -1,5 +1,5 @@
 """
-The priority list as an Excel working paper, with four sheets:
+The vouchers suggested for review as an Excel working paper, with four sheets:
 
 - **Cover**: what the extract is (source, population, settings, complete or partial), the tests
   that couldn't run, the date run, and blank preparer and reviewer.

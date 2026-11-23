@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Wording**: the output is "vouchers suggested for review", not a "priority list", which would read as an
+  audit judgement that these entries matter most (DESIGN, "Size of the suggested list"). README, DESIGN, the
+  benchmark docs, docstrings, the notebook and its charts change; code names such as `priority_list_size` stay.
+  The sample is now `docs/sample_working_paper.xlsx` (content unchanged) and the demo writes `working_paper.xlsx`.
+- **Priors**: a test whose name matches no prior key warns instead of taking 1.0 silently.
+- **Docs**: `priority_list_size` documents that it counts vouchers (it said "a 30,000-line ledger").
+
 ## 0.7.0
 
 A one-command synthetic demo, and input checks that stop where the tool used to carry on. Figures unchanged.

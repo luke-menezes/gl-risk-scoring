@@ -1,6 +1,6 @@
 """
 Rebuild the mock IDEA exports in fixtures/idea_exports and the sample working paper
-docs/sample_priority_list.xlsx from the seeded synthetic ledger, and print the top 5 vouchers for the README.
+docs/sample_working_paper.xlsx from the seeded synthetic ledger, and print the top 5 vouchers for the README.
 
     python scripts/make_fixtures.py                    # fixtures and sample
     python scripts/make_fixtures.py --ledger ledger.xlsx   # also write the ledger to import into IDEA
@@ -19,7 +19,7 @@ from glrisk import RunSettings, export, flags, pipeline, scoring, synthetic
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures" / "idea_exports"
-SAMPLE = ROOT / "docs" / "sample_priority_list.xlsx"
+SAMPLE = ROOT / "docs" / "sample_working_paper.xlsx"
 
 
 def defaults(func) -> dict:

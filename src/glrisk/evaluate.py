@@ -150,7 +150,7 @@ def prior_sensitivity(n_rows: int, seed: int, draws: int = 20, spread: float = 0
     Re-score one ledger with every prior multiplied by a random factor in [1 - spread, 1 + spread].
 
     One row per draw: ``precision`` at the default k, and ``overlap``, the share of the default
-    priority list still on the list. Shows whether the ranking depends on the exact prior values.
+    suggested list still on the list. Shows whether the ranking depends on the exact prior values.
     """
     ledger, _, _, vouchers = prepare(n_rows, seed)
     key = vouchers.attrs["voucher_col"]
@@ -167,7 +167,7 @@ def prior_sensitivity(n_rows: int, seed: int, draws: int = 20, spread: float = 0
 def size_bias(n_rows: int, seed: int) -> pd.DataFrame:
     """
     One row per voucher: its number of lines, whether it is normal (no injected anomaly), flagged by
-    any test, and on the default priority list. A voucher with more lines has more chances to be
+    any test, and on the default suggested list. A voucher with more lines has more chances to be
     flagged by chance; this measures how much.
     """
     ledger, _, _, vouchers = prepare(n_rows, seed)

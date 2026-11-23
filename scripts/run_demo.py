@@ -12,7 +12,7 @@ import pandas as pd
 from glrisk import RunSettings, export, flags, pipeline, population, scoring, synthetic
 
 SEED = 0
-WORKBOOK = "priority_list.xlsx"
+WORKBOOK = "working_paper.xlsx"
 SUMMARY = "review_summary.md"
 
 
