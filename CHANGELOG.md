@@ -1,11 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
+Batch vouchers in the synthetic ledger, and the amount multiplier sized on the largest flagged line. Every
+figure changes: the risk score's precision@50 is 0.825 ± 0.046 (0.849 in 0.7.0), and the per-line baseline is
+now slightly ahead (0.845).
+
+- **Scoring** (changes the ranking): the amount multiplier sizes each voucher's largest flagged line
+  (`Flagged Amount`, a new column from `to_vouchers` and on the Vouchers sheet), not the whole voucher, so a
+  batch flagged on a few small lines isn't lifted by its total. `score_flags(..., flagged_amount=False)`
+  keeps the old sizing; performance materiality still compares the whole voucher.
+- **Generator**: about 0.3% of vouchers are batch vouchers of 20 to 60 lines (payroll and supplier payment
+  runs; `synthetic.BATCH_SHARE`, `BATCH_LINES`), in which about 2% of the lines end in 99 and three in ten
+  repeat an instalment: ordinary business the line-level tests flag by chance. They come with the background
+  noise (none with `noise=False`) and never carry an injected anomaly. Ledgers gain about 4% more lines.
+- **Benchmark** (`docs/benchmark_results.md`, 30 seeds, k = 50): risk score 0.825 ± 0.046, per-line
+  baseline 0.845 ± 0.048, counting tests 0.659 ± 0.056, Isolation Forest 0.570 ± 0.059. With the
+  whole-voucher amount (a new ablation variant) the risk score is 0.786: the batch vouchers cost about 6
+  points and the new sizing wins back about 4 (ahead on 27 of the 30 ledgers, behind on none). Batch
+  vouchers are 0.3% of the vouchers and 9.1% of the list (17.9% with the whole-voucher amount); the voucher
+  size table gains a batch row and a whole-voucher column. Adding up the flagged lines, as the production
+  tooling does, was measured on 10 seeds (0.804 against 0.820) and not used.
 - **Wording**: the output is "vouchers suggested for review", not a "priority list", which would read as an
   audit judgement that these entries matter most (DESIGN, "Size of the suggested list"). README, DESIGN, the
   benchmark docs, docstrings, the notebook and its charts change; code names such as `priority_list_size` stay.
-  The sample is now `docs/sample_working_paper.xlsx` (content unchanged) and the demo writes `working_paper.xlsx`.
+  The sample is now `docs/sample_working_paper.xlsx` and the demo writes `working_paper.xlsx`.
 - **Priors**: a test whose name matches no prior key warns instead of taking 1.0 silently.
 - **Docs**: `priority_list_size` documents that it counts vouchers (it said "a 30,000-line ledger").
 

@@ -40,6 +40,9 @@ SILENT_DESCRIPTIONS = [d for d in DESCRIPTIONS if d != "Director fees"]
 VOUCHER_SIZES = (2, 3, 4)
 VOUCHER_SIZE_SHARES = (0.55, 0.25, 0.20)
 MEAN_VOUCHER_LINES = float(np.dot(VOUCHER_SIZES, VOUCHER_SIZE_SHARES))
+# Batch vouchers (payroll and supplier payment runs): this share of vouchers, with 20 to 60 lines each
+BATCH_SHARE = 0.003
+BATCH_LINES = (20, 60)
 COUNTER_ACCOUNTS = ["Cash at Bank", "Accounts Receivable", "Accounts Payable", "VAT Payable"]
 # Income-statement accounts open the year at zero: last year's result moved to retained earnings
 INCOME_STATEMENT = ("Revenue", "Cost of Sales", "Payroll Expense", "Rent Expense", "Utilities", "Travel Expense",
@@ -66,8 +69,10 @@ def make_ledger(
     payables or VAT) or the total split across two or three, so debits equal credits. Normal
     vouchers have log-normal amounts with cents, mostly weekday dates, a ``Source`` (mostly
     "System", about ``manual_share`` "Manual") and a realistic amount of "noise": a few weekend
-    postings, round totals, double postings, keyword hits, routine system accruals at quarter ends
-    and system vouchers with no narration, none of them anomalies.
+    postings, round totals, double postings, keyword hits, routine system accruals at quarter ends,
+    system vouchers with no narration, and large batch vouchers (payroll and supplier payment runs of
+    20 to 60 lines, about ``BATCH_SHARE`` of the vouchers, adding about 4% to the lines) in which a few
+    small lines end in 99 or repeat an instalment, none of them anomalies.
 
     Injected anomalies (about ``anomaly_rate`` of the vouchers) each carry one to four signals and a
     larger amount. Weekend, period-end, manual and same-user signals belong to the whole voucher; a
@@ -114,11 +119,13 @@ def make_ledger(
     vouchers = _headers(rng, sizes, days, weights / weights.sum(), manual_share, noise)
     if noise:
         _add_noise(rng, vouchers, days, window, noise_scale)
+        _batches(rng, vouchers)
     _inject(rng, vouchers, days, window, anomaly_rate, silent_share)
     df = _legs(rng, vouchers)
     if noise:
-        # Double postings of normal vouchers: every line copied under a new voucher number
-        normal = vouchers.loc[vouchers["Anomaly"] == "", "Voucher No"]
+        _batch_lines(rng, df)
+        # Double postings of normal vouchers (not batches): every line copied under a new voucher number
+        normal = vouchers.loc[(vouchers["Anomaly"] == "") & (vouchers["Lines"] <= max(VOUCHER_SIZES)), "Voucher No"]
         copies = rng.choice(normal, size=max(1, int(len(vouchers) // 400 * noise_scale)), replace=False)
         dupes = df[df["Voucher No"].isin(copies)].copy()
         dupes["Voucher No"] = dupes["Voucher No"].map({c: f"JV{len(vouchers) + i + 1:05d}" for i, c in enumerate(copies)})
@@ -185,7 +192,7 @@ def _inject(rng: np.random.Generator, v: pd.DataFrame, days: pd.DatetimeIndex, w
             anomaly_rate: float, silent_share: float) -> None:
     """Injected anomalies: 1-4 signals each and a larger than usual total, per voucher (in place)."""
     n_anomalies = max(1, int(len(v) * anomaly_rate))
-    rows = rng.choice(len(v), size=n_anomalies, replace=False)
+    rows = rng.choice(np.flatnonzero(v["Lines"] <= max(VOUCHER_SIZES)), size=n_anomalies, replace=False)   # no batches
     weekends = days[days.dayofweek >= 5]
     # Not filtered by a holiday calendar: the ledger must not change with the holidays package version
     weekdays = days[(days.dayofweek < 5) & (window == "")]
@@ -226,6 +233,37 @@ def _inject(rng: np.random.Generator, v: pd.DataFrame, days: pd.DatetimeIndex, w
         if "self_approved" in signals:
             v.loc[row, "Approved By"] = v.loc[row, "Created By"]
         v.loc[row, "Anomaly"] = "+".join(sorted(signals))
+
+
+def _batches(rng: np.random.Generator, v: pd.DataFrame) -> None:
+    """Large system batch vouchers: a payroll or payment run's total on one line, split over many (in place)."""
+    idx = rng.choice(len(v), size=round(len(v) * BATCH_SHARE), replace=False)
+    lines = rng.integers(BATCH_LINES[0], BATCH_LINES[1] + 1, size=len(idx))
+    payroll = rng.random(len(idx)) < 0.5
+    v.loc[idx, "Lines"] = lines
+    v.loc[idx, "Total"] = [round(rng.lognormal(7.5, 1.3, size=n - 1).sum(), 2) for n in lines]
+    v.loc[idx, "Account"] = np.where(payroll, "Payroll Expense", "Accounts Payable")
+    v.loc[idx, "Description"] = np.where(payroll, "Monthly payroll", "Supplier payment")
+    v.loc[idx, ["Source", "Main Debit"]] = ["System", True]
+
+
+def _batch_lines(rng: np.random.Generator, legs: pd.DataFrame) -> None:
+    """
+    In batch vouchers, about 2% of the counter lines are whole amounts ending in 99 (prices such as
+    2,499.00) and three in ten repeat one line's account and amount (an instalment paid twice in the
+    run): chance flags on small lines. The main line is re-totalled, so the voucher still balances.
+    """
+    batch = legs.groupby("Voucher No")["Voucher No"].transform("size") > max(VOUCHER_SIZES)
+    counter = batch & legs.duplicated("Voucher No")       # every line but the first (main) one
+    priced = legs.index[counter & (rng.random(len(legs)) < 0.02)]
+    legs.loc[priced, "_amount"] = rng.integers(2, 20, size=len(priced)) * 500 - 1.0
+    for rows in legs[counter].groupby("Voucher No").groups.values():
+        if rng.random() < 0.3:
+            first, second = rng.choice(rows, size=2, replace=False)
+            legs.loc[second, ["Account", "_amount"]] = legs.loc[first, ["Account", "_amount"]].to_numpy()
+    main = batch & ~counter
+    totals = legs[counter].groupby("Voucher No")["_amount"].sum()
+    legs.loc[main, "_amount"] = legs.loc[main, "Voucher No"].map(totals).round(2).to_numpy()
 
 
 def _legs(rng: np.random.Generator, v: pd.DataFrame) -> pd.DataFrame:

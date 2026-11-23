@@ -16,6 +16,7 @@ VARIANTS = {
     "Date tests not collapsed": {"collapse_dates": False},
     "No amount multiplier": {"amount_multiplier": False},
     "No Benford diversity scaling": {"benford_scaling": False},
+    "Whole-voucher amount in the multiplier": {"flagged_amount": False},
 }
 
 
@@ -167,16 +168,19 @@ def prior_sensitivity(n_rows: int, seed: int, draws: int = 20, spread: float = 0
 def size_bias(n_rows: int, seed: int) -> pd.DataFrame:
     """
     One row per voucher: its number of lines, whether it is normal (no injected anomaly), flagged by
-    any test, and on the default suggested list. A voucher with more lines has more chances to be
-    flagged by chance; this measures how much.
+    any test, on the default suggested list, and on the list the whole-voucher multiplier would give.
+    A voucher with more lines has more chances to be flagged by chance; this measures how much, and
+    how many batch vouchers each multiplier lists.
     """
     ledger, _, _, vouchers = prepare(n_rows, seed)
     key = vouchers.attrs["voucher_col"]
     groups = ledger.groupby(key)
     listed = scoring.score_flags(vouchers, VOUCHER_AMOUNT)[key]
+    whole = scoring.score_flags(vouchers, VOUCHER_AMOUNT, flagged_amount=False)[key]
     return pd.DataFrame({"lines": groups.size(), "normal": groups["Anomaly"].first() == "",
                          "flagged": groups.size().index.isin(vouchers[key]),
-                         "listed": groups.size().index.isin(listed)}).assign(seed=seed)
+                         "listed": groups.size().index.isin(listed),
+                         "listed_whole": groups.size().index.isin(whole)}).assign(seed=seed)
 
 
 def summarise(results: pd.DataFrame, default_k_only: bool = True) -> pd.DataFrame:

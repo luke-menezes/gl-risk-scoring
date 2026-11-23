@@ -4,6 +4,6 @@ from . import benford, evaluate, export, flags, plots, population, rules, scorin
 from .pipeline import run_python_tests
 from .settings import RunSettings
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = ["RunSettings", "benford", "evaluate", "export", "flags", "plots", "population", "rules", "run_python_tests",
            "scoring", "settings", "synthetic"]

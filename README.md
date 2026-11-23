@@ -10,10 +10,10 @@
   (period-end and manual entries, round amounts, seldom-used accounts, vague narration and more),
   then ranks whole journals with a transparent score, so an audit team can select from the top 50
   instead of thousands of flagged lines.
-- **How well:** on 30 synthetic ledgers, 85% of the top 50 journals carry injected anomalies,
-  against 67% for counting how many tests each journal meets and 57% for an Isolation Forest. An
-  ablation, size sweeps and robustness checks are included, and one result that didn't favour the
-  method is reported.
+- **How well:** on 30 synthetic ledgers, 83% of the top 50 journals carry injected anomalies,
+  against 66% for counting how many tests each journal meets and 57% for an Isolation Forest. An
+  ablation, size sweeps and robustness checks are included, and the results that didn't favour the
+  method are reported.
 - **What you get:** an Excel working paper with a plain-language reason for each journal and blank
   columns for the auditor's testing, and a tested Python package (CI on Python 3.11 to 3.14).
 
@@ -145,48 +145,53 @@ flowchart LR
 - **Benford scaled by amount diversity.** In ledgers of fixed fees or salaries, non-conformity is
   expected and says little about any one line, so Benford's weight shrinks with the share of
   distinct amounts.
-- **Amount as a log multiplier.** `1 + log10(1 + voucher amount / median)`: large vouchers rise
-  without a hard cut-off, and one rare characteristic on a very large entry can still make the list.
+- **Amount as a log multiplier.** `1 + log10(1 + flagged amount / median)`, where the flagged amount
+  is the voucher's largest flagged line: large entries rise without a hard cut-off, one rare
+  characteristic on a very large entry can still make the list, and a 50-line batch flagged on a few
+  small lines isn't lifted by its total.
 - **List size grows with √n.** `clip(0.577·√n, 20, 150)` for n vouchers: about 50 for a ledger of
   7,500 vouchers, never more than a reviewer can work through.
 
 **What the benchmark can and can't show.** On the synthetic ledgers, per-ledger rarity and the amount
-multiplier clearly earn their place (about 6 and 7.5 points). The illustrative priors add about 1.5
+multiplier clearly earn their place (about 3.5 and 6 points), and sizing the multiplier on the
+largest flagged line rather than the whole voucher adds about 4. The illustrative priors add about 1.3
 points over rarity alone, within one standard deviation, and the date collapse and the Benford
 scaling make no measurable difference. The synthetic data can't test these three: it has no history
 for priors to encode, few vouchers where calendar tests stack, and almost no repeated amounts. They
 stay because the production tooling has to handle exactly those cases on real ledgers. Scoring per
-voucher ranks no better than scoring lines and listing their vouchers (see below): its value here is
+voucher ranks slightly below scoring lines and listing their vouchers (see below): its value here is
 that the list, the rarities and the working paper are in the unit auditors test.
 
 More detail in [`DESIGN.md`](DESIGN.md).
 
 ## Results on synthetic data
 
-On synthetic ledgers, the top-50 list of vouchers is 84.9% precise (± 5.2 points over 30 seeds),
-against 66.5% for counting how many tests each voucher meets and 56.5% for an Isolation Forest.
+On synthetic ledgers, the top-50 list of vouchers is 82.5% precise (± 4.6 points over 30 seeds),
+against 65.9% for counting how many tests each voucher meets and 57.0% for an Isolation Forest.
 
-Each ledger has about 20,000 lines in about 7,550 balanced vouchers of 2 to 4 lines, plus about 20
+Each ledger has about 20,900 lines in about 7,550 balanced vouchers, mostly of 2 to 4 lines, plus
+about 20 batch vouchers (payroll and supplier payment runs of 20 to 60 lines) and about 20
 double-posted vouchers. 0.8% of the vouchers (about 60) are injected anomalies, all with a larger
 amount. These labels exist only in the synthetic data: a real ledger has none. Nine in ten anomalous
 vouchers carry one to four signals, each a characteristic a test looks for; the other tenth are
 "silent", an unusual amount on a common account on a weekday, from the system, with nothing for any
 test to find. Alongside them is normal business that trips the tests anyway: round rent payments,
 director fees, a fixed-price supplier, weekend postings, double postings, routine system accruals at
-quarter ends and system vouchers with no narration. The list suggests 50 vouchers. Figures are
+quarter ends, system vouchers with no narration, and batch vouchers in which a few small lines end in
+99 or repeat an instalment. The list suggests 50 vouchers. Figures are
 per voucher, the mean ± standard deviation over 30 seeds (30 different ledgers), from
 `scripts/run_benchmark.py`; every run is in [`docs/benchmark.csv`](docs/benchmark.csv), and the full
 tables are in [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
 | Ranking | Precision@50 | Recall@50 |
 |---|---|---|
-| **Risk score** | **0.849 ± 0.052** | **0.708 ± 0.043** |
-| Lines scored on their own, each voucher listed where its first line appears | 0.852 ± 0.053 | 0.710 ± 0.044 |
-| Number of tests hit | 0.665 ± 0.058 | 0.554 ± 0.049 |
-| Isolation Forest (unsupervised, line features; a voucher's most anomalous line) | 0.565 ± 0.079 | 0.471 ± 0.065 |
-| Voucher amount only | 0.462 ± 0.057 | 0.385 ± 0.048 |
-| Random flagged vouchers | 0.020 ± 0.021 | 0.017 ± 0.018 |
-| Ceiling: best any ranking of flagged vouchers can do | 1.000 | 0.921 ± 0.018 |
+| **Risk score** | **0.825 ± 0.046** | **0.688 ± 0.039** |
+| Lines scored on their own, each voucher listed where its first line appears | 0.845 ± 0.048 | 0.704 ± 0.040 |
+| Number of tests hit | 0.659 ± 0.056 | 0.549 ± 0.046 |
+| Isolation Forest (unsupervised, line features; a voucher's most anomalous line) | 0.570 ± 0.059 | 0.475 ± 0.049 |
+| Voucher amount only | 0.311 ± 0.040 | 0.259 ± 0.033 |
+| Random flagged vouchers | 0.017 ± 0.017 | 0.014 ± 0.015 |
+| Ceiling: best any ranking of flagged vouchers can do | 1.000 | 0.918 ± 0.021 |
 
 ![Precision at k](docs/precision_at_k.png)
 
@@ -199,17 +204,22 @@ in principle find silent anomalies through their amount, but it still ranks belo
 scores.
 
 **Per voucher against per line, on the same ledgers.** Scoring the lines on their own and listing
-each voucher where its first line appears does as well as scoring per voucher: 0.852 against 0.849,
-level on 19 of the 30 ledgers, ahead on 8 and behind on 3. The reason is in the generator: an
+each voucher where its first line appears is slightly more precise than scoring per voucher: 0.845
+against 0.825, ahead on 22 of the 30 ledgers, level on 3 and behind on 5. Two things explain it. An
 anomalous voucher's line-level signals (a seldom account, a keyword, a round total) sit on its main
-line, and the voucher-level ones (date, manual, same user) are on every line, so the best line of an
-anomalous voucher already carries nearly everything the voucher does. Scoring per voucher would rank
-differently where signals are spread across a voucher's lines; the generator wasn't changed to show
-that, because data built to favour the method proves nothing. Per voucher is kept because it is the
-unit auditors select and test, and it makes the rarities and the list count journals rather than lines.
+line, and the voucher-level ones (date, manual, same user) are on every line, so its best line
+already carries nearly everything the voucher does. And a batch voucher meets tests on different
+lines by chance (a duplicate on one, a 99 ending on another), which the voucher score adds together
+and a line score never does: the voucher-size bias. The batch vouchers were added in 0.8.0 to expose
+that weakness, not to flatter the method, and before them the two tied (0.849 and 0.852). Per voucher
+is kept because it is the unit auditors select and test, and it makes the rarities and the list count
+journals rather than lines.
 
 **Which parts matter.** Switched off one at a time, per-ledger rarity and the amount multiplier are
-worth about 6 and 7.5 points; the illustrative priors about 1.5, within the noise. **Robustness.**
+worth about 3.5 and 6 points, and sizing the multiplier on the largest flagged line rather than the
+whole voucher about 4 (ahead on 27 of the 30 ledgers, behind on none): batch vouchers are 0.3% of the
+vouchers but 9% of the list, against 18% with the whole-voucher amount. The illustrative priors add
+about 1.3 points, within the noise. **Robustness.**
 With the generator's own settings drawn at random, the risk score is ahead of counting tests on all
 30 ledgers, and about 90% of the list survives every prior being perturbed by up to ±50%.
 
@@ -224,16 +234,16 @@ descriptions), as printed by `scripts/make_fixtures.py`:
 
 | Voucher No | Accounts | Lines | Amount | Score | Score Breakdown |
 |---|---|---|---|---|---|
-| JV05068 | Suspense Account 9, VAT Payable | 2 | 100,000 | 53.9 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Rounded Amount 3.6 + date (Period End) 1.0 + Manual Entry 0.8, × amount 2.72 |
-| JV07030 | Suspense Account 22, Cash at Bank, Accounts Receivable | 4 | 31,913 | 45.1 | Same User Created and Approved 7.2 + Seldom Account Entries 7.2 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8, × amount 2.24 |
-| JV07255 | Payroll Expense, VAT Payable, Accounts Receivable | 3 | 70,000 | 43.3 | Same User Created and Approved 7.2 + Rounded Amount 3.6 + Keyword Match 3.6 + date (Saturday) 1.3 + Manual Entry 0.8 + Benford 0.3, × amount 2.57 |
-| JV04295 | Suspense Account 28, Accounts Receivable, Accounts Payable | 3 | 179,999 | 41.0 | Seldom Account Entries 7.2 + Ending 99/999 4.5 + date (Sunday) 1.4 + Manual Entry 0.8, × amount 2.97 |
-| JV01634 | Payroll Expense, VAT Payable, Accounts Receivable | 3 | 45,999 | 37.3 | Same User Created and Approved 7.2 + Ending 99/999 4.5 + Keyword Match 3.6 + Benford 0.3, × amount 2.39 |
+| JV00206 | Suspense Account 9, Cash at Bank, Accounts Receivable | 3 | 99,453 | 49.5 | Same User Created and Approved 7.0 + Seldom Account Entries 6.6 + Keyword Match 3.6 + date (Period End) 1.0, × amount 2.71 |
+| JV01161 | Suspense Account 15, Accounts Receivable | 3 | 41,777 | 43.6 | Same User Created and Approved 7.0 + Seldom Account Entries 6.6 + No or Vague Narration 2.5 + date (Saturday) 1.3 + Manual Entry 0.8 + Benford 0.3, × amount 2.35 |
+| JV05479 | Suspense Account 21, VAT Payable | 2 | 100,000 | 39.8 | Seldom Account Entries 6.6 + Rounded Amount 3.6 + Keyword Match 3.6 + Manual Entry 0.8, × amount 2.72 |
+| JV07478 | Suspense Account 21, Accounts Payable | 2 | 180,999 | 37.9 | Seldom Account Entries 6.6 + Ending 99/999 4.0 + date (Saturday) 1.3 + Manual Entry 0.8, × amount 2.97 |
+| JV02230 | Accounts Payable, Accounts Receivable | 2 | 60,000 | 37.6 | Same User Created and Approved 7.0 + Rounded Amount 3.6 + Keyword Match 3.6 + Manual Entry 0.8, × amount 2.50 |
 
 In the working paper the same vouchers carry a plain sentence that notes partial hits, for example
-JV07030: "Posted on a Saturday; description matches the keyword list (1 of 4 lines); a manual entry;
-created and approved by the same user ID; posted to an account with 3 entries or fewer (1 of 4
-lines); a large amount (16 times the median)."
+JV01161: "Posted on a Saturday; no or vague narration (1 of 3 lines); a manual entry; first digit
+over-represented in this ledger (Benford) (1 of 3 lines); created and approved by the same user ID;
+posted to an account with 3 entries or fewer (1 of 3 lines); a large amount (21 times the median)."
 
 ## The working paper
 

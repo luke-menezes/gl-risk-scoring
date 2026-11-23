@@ -23,7 +23,13 @@ def test_ledger_layouts_and_ground_truth(ledger):
     assert {"Debit", "Credit"} <= set(ledger.columns)
     assert ((ledger["Debit"] == 0) | (ledger["Credit"] == 0)).all()
     vouchers = ledger.groupby("Voucher No")
-    assert vouchers.size().between(2, 4).all()
+    sizes = vouchers.size()
+    batches = sizes[sizes > max(synthetic.VOUCHER_SIZES)]
+    assert set(sizes[sizes <= max(synthetic.VOUCHER_SIZES)]) == {2, 3, 4} and batches.between(*synthetic.BATCH_LINES).all()
+    assert len(batches) == 6                                         # 0.3% of about 1,890 vouchers
+    batch_lines = ledger[ledger["Voucher No"].isin(batches.index)]
+    assert (batch_lines["Source"] == "System").all() and (batch_lines["Anomaly"] == "").all()
+    assert synthetic.make_ledger(5_000, seed=1, noise=False).groupby("Voucher No").size().max() == 4   # batches are noise
     assert ((ledger["Debit"] - ledger["Credit"]).groupby(ledger["Voucher No"]).sum().abs() < 1e-6).all()   # balanced
     shared = ["Date", "Created By", "Approved By", "Source", "Anomaly"]
     assert (vouchers[shared].nunique() == 1).all().all()           # header fields are the voucher's
@@ -342,7 +348,28 @@ def test_voucher_scoring():
     assert fee_vouchers.attrs["amount_diversity"] < 0.5                                       # lines repeat
     assert scoring.test_weights(fee_vouchers, amount_cols=["Voucher Amount"])[2] < 1
     bias = evaluate.size_bias(2_000, seed=0)
-    assert set(bias["lines"]) == {2, 3, 4} and bias["listed"].sum() == scoring.priority_list_size(len(bias))
+    assert set(bias.loc[bias["lines"] <= 4, "lines"]) == {2, 3, 4} and (bias["lines"] > 4).any()
+    assert bias["listed"].sum() == bias["listed_whole"].sum() == scoring.priority_list_size(len(bias))
+
+
+def test_flagged_amount_sizes_the_multiplier_on_flagged_lines():
+    # A 21-line batch (100,000 against twenty lines of 5,000) flagged on two 5,000 lines, and a 2-line
+    # voucher of 5,000 flagged on its main line: the same test on lines of the same size. Eight more
+    # 2-line vouchers are unflagged, so the test is rare
+    batch = pd.DataFrame({"Sr No": range(1, 22), "Voucher No": "B", "Debit": [100_000.0] + [0.0] * 20,
+                          "Credit": [0.0] + [5_000.0] * 20})
+    small = pd.DataFrame({"Sr No": range(22, 40), "Voucher No": ["S", "S", *[f"V{i // 2}" for i in range(16)]],
+                          "Debit": [5_000.0, 0.0] * 9, "Credit": [0.0, 5_000.0] * 9})
+    lines = flags.consolidate(pd.concat([batch, small], ignore_index=True), {"Duplicate": {"2", "3", "22"}}, min_flags=0)
+    vouchers = scoring.to_vouchers(lines, ["Debit", "Credit"])
+    amounts = vouchers.set_index("Voucher No")[["Voucher Amount", "Flagged Amount"]]
+    assert amounts.loc["B"].tolist() == [100_000, 5_000] and amounts.loc["S"].tolist() == [5_000, 5_000]
+    scored = scoring.score_flags(vouchers, ["Voucher Amount"], top_n=None).set_index("Voucher No")["Score"]
+    whole = scoring.score_flags(vouchers, ["Voucher Amount"], top_n=None, flagged_amount=False).set_index("Voucher No")["Score"]
+    assert scored["B"] == scored["S"] and whole["B"] > whole["S"]
+    # Performance materiality still compares the whole voucher
+    above = scoring.score_flags(vouchers, ["Voucher Amount"], top_n=0, performance_materiality=50_000)
+    assert above["Voucher No"].tolist() == ["B"]
 
 
 def test_unmatched_test_name_warns_and_takes_neutral_prior():
