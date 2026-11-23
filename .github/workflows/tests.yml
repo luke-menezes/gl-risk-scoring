@@ -17,7 +17,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -e ".[dev,ml]"
+      # 3.11 installs the versions behind the published figures; the others test the latest releases
+      - run: pip install -e ".[dev,ml]" ${{ matrix.python-version == '3.11' && '-c docs/benchmark-constraints.txt' || '' }}
       - run: ruff check .
       - run: pytest -q
       - name: Run the demo notebook

@@ -1,6 +1,7 @@
 import runpy
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import pandas as pd
@@ -8,7 +9,8 @@ import pytest
 
 from glrisk import synthetic
 
-DEMO = Path(__file__).resolve().parents[1] / "scripts" / "run_demo.py"
+ROOT = Path(__file__).resolve().parents[1]
+DEMO = ROOT / "scripts" / "run_demo.py"
 
 
 def test_demo_writes_workbook_and_summary(tmp_path):
@@ -36,8 +38,19 @@ def test_demo_writes_workbook_and_summary(tmp_path):
     assert f"Voucher **{voucher}** ranked first" in summary
     for row_id in voucher_lines["Sr No"]:
         assert f"| {row_id} |" in summary
-    committed = DEMO.parents[1] / "docs" / "demo_summary.md"
-    assert summary == committed.read_text(encoding="utf-8"), "rerun scripts/run_demo.py and update docs/demo_summary.md"
+
+
+def test_demo_summary_matches_docs_on_pinned_versions(tmp_path):
+    # Library upgrades can move the figures (a holidays release moved UAE dates), so the committed
+    # summary is compared only on the versions in the constraints file (CI's Python 3.11 job)
+    pinned = dict(line.split("==") for line in (ROOT / "docs" / "benchmark-constraints.txt").read_text().split()
+                  if "==" in line)
+    differ = {name: version(name) for name in ("numpy", "pandas", "holidays") if version(name) != pinned[name]}
+    if differ:
+        pytest.skip(f"versions differ from docs/benchmark-constraints.txt: {differ}")
+    subprocess.run([sys.executable, str(DEMO), "--output-dir", str(tmp_path)], check=True, capture_output=True)
+    summary = (tmp_path / "review_summary.md").read_text(encoding="utf-8")
+    assert summary == (ROOT / "docs" / "demo_summary.md").read_text(encoding="utf-8"), "rerun scripts/run_demo.py"
 
 
 def test_demo_stops_before_export_if_trial_balance_differs(tmp_path, monkeypatch, capsys):
