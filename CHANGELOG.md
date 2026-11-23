@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Docs**: the social preview image shows the 0.8.0 figures and sample.
+
 ## 0.8.0
 
 Batch vouchers in the synthetic ledger, and the amount multiplier sized on the largest flagged line. Every
