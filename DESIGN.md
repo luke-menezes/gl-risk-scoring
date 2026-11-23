@@ -30,7 +30,10 @@ all non-zero lines rather than over flagged lines (see below).
 
 A voucher with more lines has more chances to meet a test by chance. That bias is measured in the
 benchmark and reported, not corrected: the production tooling accepts it, because a longer journal
-also has more to test.
+also has more to test. Its one correction is in the amount multiplier (below), so that a large batch
+flagged on a few small lines isn't lifted by its total. The batch vouchers in the synthetic ledger
+show what is left: they meet tests on different lines by chance and the voucher score adds them, so
+scoring lines and listing their vouchers is now slightly ahead ([benchmark](docs/benchmark.md)).
 
 For a voucher flagged by tests T:
 
@@ -39,7 +42,7 @@ For a voucher flagged by tests T:
 
     weight(t)         = rarity(t) × prior(t)        (× Benford factor for Benford)
     rarity(t)         = -log10(vouchers flagged by t / vouchers in the ledger)
-    amount multiplier = 1 + log10(1 + voucher amount / median voucher amount)
+    amount multiplier = 1 + log10(1 + largest flagged line / median voucher amount)
 
 - **Rarity is per ledger.** The same test can be rare in one ledger and routine in the next, for
   example weekend postings in a business that trades on Saturdays. Log scale keeps one very rare
@@ -56,8 +59,14 @@ For a voucher flagged by tests T:
   line amounts, which are what Benford tests. Ledgers of repeated fixed prices fail Benford by
   construction; there the test says little about any one entry. Voucher totals wouldn't do: a total
   that adds several legs varies even when every leg is a repeated fixed fee.
-- **Amount multiplier.** No hard materiality cut-off: a voucher ten times the median gets about
-  ×2.0, a hundred times about ×3.0. The median is over **all** vouchers with a non-zero amount, so
+- **Amount multiplier.** No hard materiality cut-off: a flagged line ten times the median voucher
+  gets about ×2.0, a hundred times about ×3.0. It sizes the voucher's largest flagged line
+  (`Flagged Amount`), not the whole voucher: a payroll run of 50 lines flagged on two small lines
+  would otherwise rank as if its total had been flagged. A test that flags every line (manual, date,
+  same user) sizes the voucher's largest line, which in a simple journal is its total. Adding up the flagged lines was
+  tried too, as the production tooling does: it left more batches on the list (precision 0.804
+  against 0.820 on 10 seeds). Performance materiality still compares the whole voucher. The median
+  is over **all** vouchers with a non-zero amount, so
   it doesn't move when a test is added or a threshold changes. (Before 0.6.0 it was the median of
   the flagged lines; the benchmark's per-line baseline keeps that, as `score_flags` does when given
   lines directly.)
@@ -147,7 +156,9 @@ refuses IDs it can't find in the ledger, because a silent mismatch would drop fl
 ## Evaluation
 
 The synthetic ledger is made of balanced vouchers of 2 to 4 lines (55%, 25% and 20%), whose lines
-share a date, users, source and narration. It marks the lines of injected anomalous vouchers in an
+share a date, users, source and narration, and since 0.8.0 about 0.3% batch vouchers of 20 to 60
+lines (payroll and supplier payment runs) in which a few small lines end in 99 or repeat an
+instalment: ordinary business that the line-level tests flag by chance. It marks the lines of injected anomalous vouchers in an
 `Anomaly` column that no test reads; real ledgers have no such labels. Most carry one to four
 signals, each a characteristic a test looks for: weekend, period end, manual and same user apply to
 the whole voucher, a seldom account, keyword or vague narration to one line, and a round or 99 total
@@ -163,7 +174,7 @@ vouchers, and measures precision and recall at k, per voucher, for:
   whether scoring per voucher beats ranking lines;
 - an Isolation Forest fitted on simple line features, each voucher listed where its most anomalous
   line appears;
-- the five ablation variants;
+- the six ablation variants, including the whole-voucher amount in the multiplier;
 - the ceiling.
 
 `scripts/run_benchmark.py` repeats this over 30 seeds and sweeps the ledger size and anomaly rate.
@@ -178,7 +189,8 @@ every ranking looks perfect; a small one has too few to fill the list.
   can't hold more anomalies than exist. The sweeps also report the share of ceiling (precision ÷ the
   best possible precision), so rows with different ceilings can be compared.
 - **Ablation**, because each design choice should show what it is worth. On this data, rarity and
-  the amount multiplier clearly help. The priors add about 1.5 points, within one standard
+  the amount multiplier clearly help, and sizing the multiplier on the largest flagged line adds
+  about 4 points over the whole voucher. The priors add about 1.3 points, within one standard
   deviation, and the date collapse and the Benford scaling make no difference. That is reported as
   it is: the generator has no history for priors to encode, rarely puts anomalies on two calendar
   signals at once, and produces almost no repeated amounts.

@@ -149,7 +149,9 @@ def write_working_paper(priority: pd.DataFrame, lines: pd.DataFrame, path: str |
     summary = [METHOD_LABEL,
                "Score = sum of the weights of the tests a voucher meets through any line (date tests count once), times the amount multiplier.",
                f"Weight = rarity in this ledger (-log10 of the share of {unit} flagged) times the prior.",
-               f"Amount multiplier = 1 + log10(1 + voucher amount / median); voucher amount = larger of total debits and credits; median {a['median_amount']:,.2f}."]
+               (f"Amount multiplier = 1 + log10(1 + flagged amount / median); flagged amount = the largest flagged line; "
+                f"median of the voucher amounts (larger of total debits and credits) "
+                f"{a['median_amount']:,.2f}.")]
 
     path = Path(path)
     with pd.ExcelWriter(path, engine="openpyxl") as writer:

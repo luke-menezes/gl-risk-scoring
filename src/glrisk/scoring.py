@@ -68,7 +68,9 @@ def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSe
     ``lines`` is ``flags.consolidate(..., min_flags=0)``: every line is needed for the voucher amounts.
     A voucher meets a test if any of its lines does, so rarity becomes the share of vouchers flagged.
     The fields the lines share (date, narration, source, users, ``Anomaly``) come from the first
-    line; ``Accounts`` lists the voucher's accounts, main line first. ``.attrs`` carry the median
+    line; ``Accounts`` lists the voucher's accounts, main line first. ``Voucher Amount`` is the larger
+    of its total debits and credits, and ``Flagged Amount`` its largest flagged line (what the amount
+    multiplier sizes). ``.attrs`` carry the median
     amount over all non-zero vouchers (for the amount multiplier, so it doesn't depend on which tests
     flagged what) and the diversity of the non-zero line amounts (for Benford, which tests lines).
     Without the voucher column, each line is its own voucher: the per-line ranking, with the median
@@ -88,6 +90,10 @@ def to_vouchers(lines: pd.DataFrame, amount_cols: Sequence[str], settings: RunSe
     out["N Flags"] = hits.sum(axis=1)
     out["Flagged By"] = [", ".join(t for t, hit in zip(tests, row) if hit) for row in hits.to_numpy()]
     out["Voucher Amount"] = amounts = voucher_amounts(lines, amount_cols, key)
+    # The largest flagged line, for the amount multiplier: a batch flagged on small lines isn't lifted whole
+    flagged_lines = lines[lines["N Flags"] > 0]
+    out["Flagged Amount"] = (absolute_amount(flagged_lines, amount_cols).groupby(flagged_lines[key]).max()
+                             .reindex(out.index, fill_value=0.0))
     out = out[out["N Flags"] > 0].reset_index().sort_values("N Flags", ascending=False, kind="stable")
     if s.account_col in lines:
         out.insert(1, "Accounts", out[key].map(groups[s.account_col].agg(lambda a: ", ".join(dict.fromkeys(a)))))
@@ -156,7 +162,7 @@ def test_weights(flagged: pd.DataFrame, priors: dict[str, float] | None = None,
 def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[str, float] | None = None,
                 top_n: int | str | None = "auto", date_tests: Sequence[str] | None = None,
                 use_rarity: bool = True, use_priors: bool = True, collapse_dates: bool = True,
-                amount_multiplier: bool = True, benford_scaling: bool = True,
+                amount_multiplier: bool = True, benford_scaling: bool = True, flagged_amount: bool = True,
                 performance_materiality: float | None = None, clearly_trivial: float | None = None) -> pd.DataFrame:
     """
     Score and rank the output of ``consolidate`` (any ``min_flags``).
@@ -169,6 +175,9 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
         date_tests: Test names to treat as date tests (default: detected by ``DATE_KEYWORDS``).
         use_rarity, use_priors, collapse_dates, amount_multiplier, benford_scaling: Each ``False``
             turns one design choice off (ablation). Defaults: all on.
+        flagged_amount: Size the amount multiplier on ``Flagged Amount`` (the largest flagged line,
+            from ``to_vouchers``) rather than ``amount_cols``; ``False`` sizes the whole voucher.
+            Performance materiality always compares ``amount_cols``.
         performance_materiality: Optional, as set by the audit team (ISA 320). Lines above it are
             always listed, after the top ``top_n`` and in addition to them, and marked in
             ``Above Performance Materiality``. The score itself doesn't change.
@@ -201,7 +210,8 @@ def score_flags(flagged: pd.DataFrame, amount_cols: Sequence[str], priors: dict[
     median = flagged.attrs.get("median_amount", nonzero.median() if len(nonzero) else 1.0)   # to_vouchers: all vouchers
     out = flagged.copy()
     out["Base Score"] = base.round(3)
-    out["Amount Multiplier"] = (1 + np.log10(1 + amounts / median)).round(3) if amount_multiplier else 1.0
+    sized = flagged["Flagged Amount"] if flagged_amount and "Flagged Amount" in flagged else amounts
+    out["Amount Multiplier"] = (1 + np.log10(1 + sized / median)).round(3) if amount_multiplier else 1.0
     out["Score"] = (base * out["Amount Multiplier"]).round(3)
 
     # "Seldom Account Entries 6.8 + date (Saturday) 1.0, × amount 2.10": why the line ranks where it does
